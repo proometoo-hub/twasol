@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Twasol Pro Native",
+    "slug": "twasol-pro-native-mobile",
+    "version": "1.0.12",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.twasol.promobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "يحتاج التطبيق إلى الكاميرا لإجراء مكالمات الفيديو داخل الشبكة المحلية.",
+        "NSMicrophoneUsageDescription": "يحتاج التطبيق إلى الميكروفون لإجراء المكالمات الصوتية والمرئية داخل الشبكة المحلية."
+      }
+    },
+    "android": {
+      "package": "com.twasol.promobile",
+      "permissions": [
+        "INTERNET",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE"
+      ],
+      "versionCode": 9,
+      "adaptiveIcon": {
+        "backgroundColor": "#111b21"
+      }
+    },
+    "plugins": [
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": false,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class org.webrtc.** { *; }\n-keep class com.oney.WebRTCModule.** { *; }"
+          }
+        }
+      ]
+    ],
+    "jsEngine": "hermes",
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#00a884",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Twasol Pro"
+    }
+  }
+}

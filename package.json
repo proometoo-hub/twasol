@@ -1,0 +1,59 @@
+{
+  "name": "twasol-pro-desktop",
+  "version": "6.47.2",
+  "description": "Twasol Pro - Radical Mobile LAN HTTPS",
+  "main": "electron/main.js",
+  "author": "Twasol",
+  "license": "MIT",
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start",
+    "desktop": "concurrently \"npm run backend\" \"npm run frontend\" \"wait-on http://localhost:3020 && npm run electron\"",
+    "mobile": "concurrently \"npm run backend\" \"npm run frontend\" \"wait-on http://localhost:3020 && cd mobile-app && npm start\"",
+    "all": "concurrently \"npm run backend\" \"npm run frontend\" \"wait-on http://localhost:3020 && npm run electron\" \"wait-on http://localhost:3020 && cd mobile-app && npm start\"",
+    "electron": "npx electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "frontend:https": "cd frontend && set HTTPS=true&& set SSL_CRT_FILE=..\\certs\\https\\11.0.0.103\\server.cert.pem&& set SSL_KEY_FILE=..\\certs\\https\\11.0.0.103\\server.key.pem&& npm start"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.0",
+    "wait-on": "^7.0.1"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.0"
+  },
+  "build": {
+    "appId": "com.twasol.pro",
+    "productName": "Twasol Pro",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/build/**/*",
+      "!backend/node_modules",
+      "!frontend/node_modules",
+      "!mobile-app/node_modules"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!node_modules/**/*",
+          "!.env",
+          "!dev.db*",
+          "!uploads/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

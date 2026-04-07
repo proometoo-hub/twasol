@@ -1,0 +1,7 @@
+تحديث v6.34.1
+
+- إصلاح خطأ TypeScript في backend/src/index.ts الخاص بمعالج الأخطاء.
+- إضافة أنواع Request/Response/NextFunction لمعالج الأخطاء.
+- إصلاح أخطاء النصوص المكسورة في backend/src/routes/reports.ts.
+- تخفيف إعدادات TypeScript في backend/tsconfig.json لتقليل أخطاء noImplicitAny أثناء التشغيل الأولي.
+- تحديث رقم النسخة إلى 6.34.1.

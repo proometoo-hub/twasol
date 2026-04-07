@@ -1,0 +1,72 @@
+تقرير المعالجات المنفذة - Twasol Pro v6.45.1
+=========================================
+
+تم تنفيذ جولة hardening عملية داخل المشروع نفسه على النسخة المرفوعة.
+
+أهم ما تم إصلاحه فعليًا:
+1) إصلاح صلاحيات Socket الحرجة على:
+   - forward_message
+   - delete_message
+   - delete_messages
+   - toggle_pin
+   - toggle_star
+   - mark_read
+   - edit_message
+   - toggle_reaction
+   - typing
+
+2) إضافة طبقة تحقق مركزية للرسائل والمحادثات داخل Socket:
+   - backend/src/socket/helpers.ts
+
+3) إضافة حماية أولية ضد spam/flood لبعض أحداث Socket:
+   - send_message
+   - toggle_reaction
+   - typing
+   - call_user
+   - native_call_invite
+
+4) إغلاق الوصول العام الافتراضي للملفات المرفوعة:
+   - تم تعطيل static /uploads افتراضيًا
+   - تم إنشاء مسار محمي:
+     /api/media/:filename
+   - الواجهة أصبحت تولد روابط الوصول المحمية تلقائيًا
+
+5) تشديد فحص الوصول للملفات قبل التفريغ الصوتي/الفيديو:
+   - /api/ai/transcribe-from-url
+
+6) إزالة الأسرار والشهادات الخاصة من الحزمة:
+   - حذف backend/.env
+   - حذف certs/dev.key
+   - حذف certs/dev.crt
+   - تحديث backend/.env.example لنسخة آمنة افتراضيًا
+
+7) تحسين تهيئة الواجهة للشبكة المحلية وElectron:
+   - إزالة API host الصلب من frontend/.env
+   - الاعتماد على hostname/runtime تلقائيًا
+   - Electron يستخدم localhost افتراضيًا بدل IP ثابت
+   - Electron يفضّل frontend/build عند توفره
+
+8) تشديد المكالمات المباشرة القديمة:
+   - لا يمكن تمرير call_user / answer / reject / end / ice إلا بين مستخدمين لديهم محادثة خاصة مشتركة
+
+9) تحسين إعدادات التسليم:
+   - توحيد الإصدار إلى 6.45.1
+   - منع فتح الجدار الناري تلقائيًا في setup.bat
+   - تحديث start/start-all/start-https
+
+10) تقييد سجل التدقيق Audit ليكون للإدارة فقط بدل كل عضو.
+
+ملفات أضيفت أو أُنشئت:
+- backend/src/socket/helpers.ts
+- backend/src/routes/media.ts
+- backend/src/utils/mediaAccess.ts
+- APPLIED_HARDENING_REPORT_AR.txt
+
+ملاحظات صريحة:
+- لم تتم إضافة test suite كاملة في هذه الجولة.
+- لم تتم إضافة lockfiles لأن الحزمة المرفوعة لا تحتوي تثبيتات dependencies جاهزة داخل بيئة العمل الحالية.
+- البنية أصبحت أكثر أمانًا وثباتًا من النسخة المرفوعة بوضوح، لكن أي تقييم خارجي محترف سيظل يفضّل لاحقًا إضافة:
+  * اختبارات تكامل للـ Socket
+  * migrations منظمة
+  * supply-chain lockfiles
+  * حزمة Desktop إنتاجية تشغّل backend المعبأ تلقائيًا إن كان المطلوب تطبيقًا مستقلًا 100%

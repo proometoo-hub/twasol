@@ -1,0 +1,36 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "resourceClass": "medium",
+      "env": {
+        "EXPO_USE_FAST_RESOLVER": "1"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "resourceClass": "medium",
+      "env": {
+        "EXPO_USE_FAST_RESOLVER": "1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "resourceClass": "medium",
+      "env": {
+        "EXPO_USE_FAST_RESOLVER": "1"
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "twasol-pro-mobile",
+  "version": "6.47.1",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start --lan -c",
+    "start:lan": "expo start --lan",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "start:tunnel": "expo start --tunnel -c",
+    "prebuild": "expo prebuild --platform android --clean",
+    "prebuild:android": "expo prebuild --platform android",
+    "apk:debug": "cd android && gradlew.bat assembleDebug",
+    "apk:release": "cd android && gradlew.bat assembleRelease",
+    "eas:configure": "eas build:configure",
+    "eas:apk": "eas build -p android --profile apk"
+  },
+  "dependencies": {
+    "expo": "~54.0.0",
+    "expo-build-properties": "~1.0.9",
+    "expo-status-bar": "~3.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-webview": "13.15.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "socket.io-client": "^4.8.1",
+    "expo-document-picker": "~13.0.3",
+    "expo-image-picker": "~16.0.6",
+    "react-native-webrtc": "^124.0.5",
+    "expo-notifications": "~0.32.12",
+    "expo-secure-store": "~15.0.7",
+    "expo-constants": "~18.0.9"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "babel-preset-expo": "^54.0.0"
+  }
+}

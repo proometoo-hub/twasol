@@ -1,0 +1,5 @@
+v6.40
+- إضافة eas.json لبناء APK عبر EAS Cloud
+- إضافة build-apk-eas.bat
+- إضافة build-apk-local.bat
+- تحسين README_MOBILE_AR.txt وشرح أن خطأ Ngrok ليس خطأ APK
