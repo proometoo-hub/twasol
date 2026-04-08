@@ -28,6 +28,7 @@ import './styles/app.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useLanguage } from './context/LanguageContext';
 import { getStoredToken } from './utils/authStorage';
+import { API_URL } from './api';
 
 function MainApp() {
   const { user, logout, isLoggedIn } = useAuth();
@@ -100,10 +101,7 @@ function MainApp() {
     let stop = false;
     const checkHealth = async () => {
       try {
-        const apiOrigin = String(process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_ORIGIN || '').trim().replace(/\/+$/, '') || (window.location.port && window.location.port !== '3020'
-          ? window.location.origin
-          : `${window.location.protocol}//${window.location.hostname}:${process.env.REACT_APP_API_PORT || '4000'}`);
-        const r = await fetch(`${apiOrigin}/api/health`);
+        const r = await fetch(`${API_URL}/api/health`);
         const data = await r.json();
         if (stop) return;
         setHealth({ status: data.status || 'ok', version: data.version || '—', checkedAt: new Date().toISOString(), ok: true, uptimeSec: data.uptimeSec || 0, clients: data.socketClients || 0 });
@@ -122,10 +120,7 @@ function MainApp() {
     if (!pendingCode || !isLoggedIn) return;
     (async () => {
       try {
-        const apiOrigin = String(process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_ORIGIN || '').trim().replace(/\/+$/, '') || (window.location.port && window.location.port !== '3020'
-          ? window.location.origin
-          : `${window.location.protocol}//${window.location.hostname}:${process.env.REACT_APP_API_PORT || '4000'}`);
-        const r = await fetch(`${apiOrigin}/api/invites/join/${pendingCode}`, {
+        const r = await fetch(`${API_URL}/api/invites/join/${pendingCode}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getStoredToken()}` }
         });

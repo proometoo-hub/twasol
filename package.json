@@ -1,6 +1,6 @@
 {
   "name": "twasol-pro-desktop",
-  "version": "6.47.2",
+  "version": "6.48.1",
   "description": "Twasol Pro - Radical Mobile LAN HTTPS",
   "main": "electron/main.js",
   "author": "Twasol",

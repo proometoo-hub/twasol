@@ -6,8 +6,13 @@ const runtimeHost = window.location.protocol === 'file:' || !window.location.hos
 const apiHost = process.env.REACT_APP_API_HOST || runtimeHost;
 const apiPort = process.env.REACT_APP_API_PORT || '4000';
 const protocol = process.env.REACT_APP_API_PROTOCOL || browserProtocol || 'http:';
-const explicitApiUrl = String(process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_ORIGIN || '').trim().replace(/\/+$/, '');
-const explicitSocketUrl = String(process.env.REACT_APP_SOCKET_URL || process.env.REACT_APP_BACKEND_ORIGIN || explicitApiUrl).trim().replace(/\/+$/, '');
+function normalizeOrigin(value) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  return raw.replace(/\/api$/i, '');
+}
+
+const explicitApiUrl = normalizeOrigin(process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_ORIGIN || '');
+const explicitSocketUrl = normalizeOrigin(process.env.REACT_APP_SOCKET_URL || process.env.REACT_APP_BACKEND_ORIGIN || explicitApiUrl);
 const useSameOrigin = process.env.REACT_APP_USE_SAME_ORIGIN === 'true'
   || (!explicitApiUrl && window.location.protocol !== 'file:' && window.location.port !== '3020' && !process.env.REACT_APP_API_HOST);
 

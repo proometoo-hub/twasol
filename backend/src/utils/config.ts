@@ -18,6 +18,24 @@ export function getAllowedOrigins(): string[] {
     .filter(Boolean);
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[|\{}()\[\]^$+*?.]/g, '\\$&');
+}
+
+export function isOriginAllowed(origin: string | undefined, allowedOrigins = getAllowedOrigins()): boolean {
+  if (!origin) return true;
+  return allowedOrigins.some((candidate) => {
+    if (!candidate) return false;
+    if (candidate === '*') return true;
+    if (candidate === origin) return true;
+    if (candidate.includes('*')) {
+      const pattern = '^' + candidate.split('*').map(escapeRegExp).join('.*') + '$';
+      return new RegExp(pattern).test(origin);
+    }
+    return false;
+  });
+}
+
 export function getPublicBaseUrl(req?: any): string {
   const fromEnv = process.env.PUBLIC_APP_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');

@@ -35,11 +35,11 @@ import pushRoutes from './routes/push';
 import { authenticateSocket } from './middleware/auth';
 import { setupChatHandlers } from './socket';
 import { uploadsDir } from './middleware/upload';
-import { getAllowedOrigins, isHttpsEnabled } from './utils/config';
+import { getAllowedOrigins, isHttpsEnabled, isOriginAllowed } from './utils/config';
 
 dotenv.config();
 const app = express();
-const APP_VERSION = '6.47.1';
+const APP_VERSION = '6.48.1';
 const allowedOrigins = getAllowedOrigins();
 const useHttps = isHttpsEnabled();
 const allowPublicUploads = /^(1|true|yes)$/i.test(process.env.ALLOW_PUBLIC_UPLOADS || '');
@@ -48,6 +48,10 @@ const sslCertFile = process.env.SSL_CERT_FILE?.trim();
 const frontendBuildDir = path.resolve(process.cwd(), '..', 'frontend', 'build');
 const frontendIndexFile = path.join(frontendBuildDir, 'index.html');
 const serveFrontendBuild = /^(1|true|yes)$/i.test(process.env.SERVE_FRONTEND_BUILD || '') || (useHttps && fs.existsSync(frontendIndexFile));
+
+const trustProxyHopsRaw = String(process.env.TRUST_PROXY_HOPS || process.env.TRUST_PROXY || '').trim();
+const trustProxyHops = trustProxyHopsRaw === '' || /^(1|true|yes)$/i.test(trustProxyHopsRaw) ? 1 : Number(trustProxyHopsRaw);
+if (Number.isFinite(trustProxyHops) && trustProxyHops > 0) app.set('trust proxy', trustProxyHops);
 
 function resolveOptionalFile(filePath?: string | null) {
   if (!filePath) return '';
@@ -65,13 +69,25 @@ const createHttpsServer = () => {
 };
 
 const server = useHttps ? createHttpsServer() : createHttpServer();
-const io = new Server(server, { cors: { origin: allowedOrigins, methods: ['GET', 'POST'] }, pingTimeout: 60000, pingInterval: 25000, maxHttpBufferSize: 50e6 });
+const io = new Server(server, {
+  cors: {
+    origin(origin, callback) {
+      if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
+      return callback(new Error(`Socket CORS blocked for origin: ${origin || 'unknown'}`));
+    },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  maxHttpBufferSize: 50e6,
+});
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('CORS blocked'));
+    if (isOriginAllowed(origin, allowedOrigins)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin || 'unknown'}`));
   },
   credentials: true,
 }));
