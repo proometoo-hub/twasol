@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, RefreshCw, Wifi, WifiOff, Gauge, Camera, MessageSquare } from 'lucide-react';
 import { buildAssetUrl } from '../api';
+import { RTC_CONFIGURATION, HAS_TURN_SERVER } from '../utils/webrtcConfig';
 
 export default function CallModal({ socket, user, targetUser, callType, isIncoming, incomingSignal, onClose }) {
   const [status, setStatus] = useState(isIncoming ? 'incoming' : 'calling');
@@ -96,7 +97,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
   }, []);
 
   const buildPeer = (stream) => {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    const pc = new RTCPeerConnection(RTC_CONFIGURATION);
     peerRef.current = pc;
     const tracks = stream?.getTracks?.() || [];
     const audioTrack = tracks.find(track => track.kind === 'audio');
@@ -130,7 +131,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
         setStatus('reconnecting');
       } else if (state === 'failed') {
         setQuality('فشلت المحاولة');
-        setPermissionError(prev => prev || 'فشل الربط الصوتي/المرئي. يمكنك الرجوع إلى المحادثة ومتابعة الكتابة.');
+        setPermissionError(prev => prev || (HAS_TURN_SERVER ? 'فشل الربط الصوتي/المرئي. يمكنك الرجوع إلى المحادثة ومتابعة الكتابة.' : 'فشل تأسيس الوسائط. الإعداد الحالي يستخدم STUN فقط، وهذا يفشل كثيرًا خارج نفس الشبكة. أضف TURN server في متغيرات الواجهة ثم أعد النشر.'));
         setStatus('error');
       }
     };
@@ -149,7 +150,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
         setConnectionState('failed');
         setStatus('error');
         setQuality('فشلت المحاولة');
-        setPermissionError(prev => prev || 'فشل الربط الصوتي/المرئي. تأكد من الثقة بالشهادة ومن منح إذن الكاميرا والمايك ثم أعد المحاولة.');
+        setPermissionError(prev => prev || (HAS_TURN_SERVER ? 'فشل الربط الصوتي/المرئي. تأكد من الثقة بالشهادة ومن منح إذن الكاميرا والمايك ثم أعد المحاولة.' : 'فشل تأسيس الاتصال بعد تبادل الإشارات. السبب المرجح أن التطبيق يعمل حاليًا بـ STUN فقط بدون TURN server، وهذا لا يكفي على Vercel/Railway أو بين شبكات مختلفة.'));
       }
     };
     return pc;

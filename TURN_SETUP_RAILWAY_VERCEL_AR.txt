@@ -1,0 +1,18 @@
+سبب فشل مكالمات الفيديو/الصوت بعد قبولها على النشر العام:
+- المشروع كان يستخدم STUN فقط داخل RTCPeerConnection.
+- هذا قد ينجح أحيانًا داخل نفس الشبكة، لكنه يفشل كثيرًا بين شبكات مختلفة أو خلف NAT/4G.
+
+المتغيرات التي يجب إضافتها في Vercel:
+REACT_APP_API_URL=https://twasol-production.up.railway.app
+REACT_APP_SOCKET_URL=https://twasol-production.up.railway.app
+REACT_APP_TURN_URL=turn:YOUR_TURN_HOST:3478?transport=udp,turn:YOUR_TURN_HOST:3478?transport=tcp
+REACT_APP_TURN_USERNAME=YOUR_USERNAME
+REACT_APP_TURN_CREDENTIAL=YOUR_PASSWORD
+
+يمكن أيضًا استخدام متغير JSON واحد:
+REACT_APP_ICE_SERVERS_JSON=[{"urls":"stun:stun.l.google.com:19302"},{"urls":["turn:YOUR_TURN_HOST:3478?transport=udp","turn:YOUR_TURN_HOST:3478?transport=tcp"],"username":"YOUR_USERNAME","credential":"YOUR_PASSWORD"}]
+
+ملاحظات:
+- لا تضف /api إلى REACT_APP_API_URL.
+- STUN وحده ليس كافيًا عادةً لمشروع منشور على Vercel/Railway.
+- TURN server يجب أن يكون على خدمة تسمح بالـ relay بشكل صحيح. يمكن أن يكون موفر خارجي أو coturn على خادم مناسب.

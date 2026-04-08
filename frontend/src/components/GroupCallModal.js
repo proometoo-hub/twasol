@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Sparkles, Shield, Users, Wifi, Wand2, MonitorUp, Pin, PinOff, UserX, VolumeX, LayoutGrid, Gauge, Zap, Radar, Activity, Hand, SmilePlus, CircleDotDashed, Radio, Crown, UserCheck, BellRing } from 'lucide-react';
 import Avatar from './Avatar';
 
-const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
+import { RTC_CONFIGURATION, HAS_TURN_SERVER } from '../utils/webrtcConfig';
 
 function applyEffect(video, effectMode, performanceMode = 'balanced') {
   if (!video) return;
@@ -248,7 +248,7 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
 
     const createPeer = async (targetUserId, makeOffer = true) => {
       if (peersRef.current[targetUserId]) return peersRef.current[targetUserId];
-      const pc = new RTCPeerConnection({ iceServers: ICE });
+      const pc = new RTCPeerConnection(RTC_CONFIGURATION);
       peersRef.current[targetUserId] = pc;
       const localTracks = localStreamRef.current?.getTracks?.() || [];
       const audioTrack = localTracks.find(track => track.kind === 'audio');
