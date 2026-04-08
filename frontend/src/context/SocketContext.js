@@ -17,9 +17,13 @@ export function SocketProvider({ children }) {
 
     const socket = io(SOCKET_URL, {
       auth: { token },
+      transports: ['websocket', 'polling'],
+      upgrade: true,
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 10
+      reconnectionDelayMax: 10000,
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
     });
 
     socket.on('connect', () => console.log('Socket connected'));

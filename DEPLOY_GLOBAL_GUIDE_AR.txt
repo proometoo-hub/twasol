@@ -1,0 +1,268 @@
+============================================================
+  Twasol Pro v6.48.3 — دليل النشر العالمي الكامل
+  Railway (Backend) + Vercel (Frontend)
+============================================================
+
+
+╔══════════════════════════════════════════════════════════╗
+║  الخطوة 1: التجهيز المبدئي                               ║
+╚══════════════════════════════════════════════════════════╝
+
+المتطلبات:
+  • حساب GitHub (مجاني)      → https://github.com
+  • حساب Railway ($5/شهر)    → https://railway.app
+  • حساب Vercel (مجاني)      → https://vercel.com
+  • Node.js 18+ على جهازك    → https://nodejs.org
+
+1. أنشئ مستودع GitHub جديد (خاص أو عام)
+2. ارفع المشروع:
+
+   git init
+   git add .
+   git commit -m "Twasol Pro v6.48.3"
+   git branch -M main
+   git remote add origin https://github.com/YOUR_USER/twasol-pro.git
+   git push -u origin main
+
+
+╔══════════════════════════════════════════════════════════╗
+║  الخطوة 2: نشر Backend على Railway                       ║
+╚══════════════════════════════════════════════════════════╝
+
+A. إنشاء المشروع:
+   1. ادخل railway.app → New Project
+   2. اختر "Deploy from GitHub repo"
+   3. اختر مستودع twasol-pro
+   4. Railway سيكتشف الإعدادات تلقائياً من railway.json
+
+B. إضافة قاعدة البيانات:
+   1. في المشروع، اضغط "New" → "Database" → "PostgreSQL"
+   2. Railway سيضيف DATABASE_URL تلقائياً كمتغير بيئة
+
+C. إعداد متغيرات البيئة (Variables):
+   اذهب إلى Service → Variables وأضف:
+
+   ┌─────────────────────────┬──────────────────────────────────────────────┐
+   │ المتغير                  │ القيمة                                       │
+   ├─────────────────────────┼──────────────────────────────────────────────┤
+   │ DATABASE_URL             │ يُضاف تلقائياً من PostgreSQL plugin          │
+   │ JWT_SECRET               │ ولّد بـ: node -e "console.log(              │
+   │                          │   require('crypto').randomBytes(48)          │
+   │                          │   .toString('base64url'))"                   │
+   │ PORT                     │ 4000                                         │
+   │ BIND_HOST                │ 0.0.0.0                                      │
+   │ PUBLIC_APP_URL           │ https://YOUR-APP.up.railway.app              │
+   │ ALLOWED_ORIGINS          │ https://YOUR-APP.vercel.app,                 │
+   │                          │ https://YOUR-APP.up.railway.app,             │
+   │                          │ https://*.vercel.app                         │
+   │ ADMIN_EMAILS             │ your-email@example.com                       │
+   │ ALLOW_FIRST_USER_ADMIN   │ true                                         │
+   │ TRUST_PROXY_HOPS         │ 1                                            │
+   │ NODE_ENV                 │ production                                   │
+   │ HTTPS_ENABLED            │ false    (Railway يتولى HTTPS تلقائياً)       │
+   │ SERVE_FRONTEND_BUILD     │ false                                        │
+   └─────────────────────────┴──────────────────────────────────────────────┘
+
+   ⚠ مهم: HTTPS_ENABLED يجب أن يكون false لأن Railway يوفر HTTPS
+     عبر الـ reverse proxy الخاص به. إذا فعّلته سيحاول السيرفر
+     قراءة شهادات SSL غير موجودة وسيفشل.
+
+D. إعدادات البناء (Settings):
+   • Root Directory: / (الجذر)
+   • Build Command: cd backend && npm install && npx prisma generate && npx tsc
+   • Start Command: cd backend && npx prisma db push --accept-data-loss && node dist/index.js
+
+E. بعد النشر:
+   • انتظر البناء (2-3 دقائق)
+   • اضغط "Generate Domain" للحصول على الرابط العام
+   • جرب: https://YOUR-APP.up.railway.app/api/health
+   • يجب أن ترى: {"status":"ok","version":"6.48.3",...}
+
+
+╔══════════════════════════════════════════════════════════╗
+║  الخطوة 3: نشر Frontend على Vercel                       ║
+╚══════════════════════════════════════════════════════════╝
+
+A. إنشاء المشروع:
+   1. ادخل vercel.com → Add New → Project
+   2. اختر نفس مستودع GitHub
+   3. في الإعدادات:
+      • Framework Preset: Create React App
+      • Root Directory: frontend    ← مهم جداً!
+      • Build Command: npm run build
+      • Output Directory: build
+
+B. متغيرات البيئة (Environment Variables):
+   أضفها قبل الضغط على Deploy:
+
+   ┌──────────────────────────────┬──────────────────────────────────────────┐
+   │ المتغير                       │ القيمة                                   │
+   ├──────────────────────────────┼──────────────────────────────────────────┤
+   │ REACT_APP_API_URL             │ https://YOUR-APP.up.railway.app          │
+   │ REACT_APP_SOCKET_URL          │ https://YOUR-APP.up.railway.app          │
+   │ REACT_APP_STUN_URL            │ stun:stun.l.google.com:19302,            │
+   │                               │ stun:stun1.l.google.com:19302            │
+   │ REACT_APP_TURN_URL            │ turn:openrelay.metered.ca:443,           │
+   │                               │ turn:openrelay.metered.ca:443?           │
+   │                               │ transport=tcp                            │
+   │ REACT_APP_TURN_USERNAME       │ openrelayproject                         │
+   │ REACT_APP_TURN_CREDENTIAL     │ openrelayproject                         │
+   └──────────────────────────────┴──────────────────────────────────────────┘
+
+C. اضغط Deploy وانتظر (1-2 دقيقة)
+
+D. بعد النشر:
+   • افتح رابط Vercel
+   • يجب أن ترى صفحة تسجيل الدخول
+   • سجل حساب جديد → أول حساب يصبح مشرف تلقائياً
+
+
+╔══════════════════════════════════════════════════════════╗
+║  الخطوة 4: إعداد TURN Server للمكالمات                    ║
+╚══════════════════════════════════════════════════════════╝
+
+⚠ المكالمات الصوتية/المرئية تحتاج TURN server لتعمل بين
+  شبكات مختلفة (مثلاً: واحد على WiFi والثاني على 4G).
+
+الإعداد الافتراضي يستخدم Open Relay المجاني:
+  • Server: turn:openrelay.metered.ca:443
+  • Username: openrelayproject
+  • Credential: openrelayproject
+
+  ✓ هذا يكفي للاختبار والاستخدام الخفيف.
+
+للإنتاج الحقيقي (كثير مستخدمين):
+  1. سجل في https://www.metered.ca/stun-turn (مجاني حتى 500GB)
+  2. أنشئ TURN server
+  3. حدّث متغيرات Vercel:
+     REACT_APP_TURN_URL=turn:YOUR-ID.relay.metered.ca:443
+     REACT_APP_TURN_USERNAME=your-api-key
+     REACT_APP_TURN_CREDENTIAL=your-api-key
+  4. أعد النشر على Vercel
+
+
+╔══════════════════════════════════════════════════════════╗
+║  الخطوة 5: التحقق من أن كل شيء يعمل                     ║
+╚══════════════════════════════════════════════════════════╝
+
+قائمة الفحص:
+
+  □ Backend Health:
+    افتح https://YOUR-APP.up.railway.app/api/health
+    → يجب أن يعرض {"status":"ok"} مع عدد المتصلين
+
+  □ التسجيل:
+    افتح رابط Vercel → سجل حساب → تأكد أنه يعمل
+
+  □ الرسائل:
+    سجل حسابين (في متصفحين مختلفين) → أرسل رسالة → تصل فوراً
+
+  □ المكالمات الصوتية:
+    من أحد الحسابين، اضغط أيقونة الهاتف → المكالمة تبدأ
+
+  □ مكالمات الفيديو:
+    اضغط أيقونة الفيديو → يجب أن تظهر الكاميرا
+
+  □ المكالمات بين شبكات مختلفة:
+    جرب من هاتف (4G) ومن كمبيوتر (WiFi)
+    إذا فشلت → تحقق من إعدادات TURN
+
+  □ WebSocket:
+    افتح Console في المتصفح → يجب أن ترى "Socket connected"
+    إذا رأيت أخطاء CORS → تحقق من ALLOWED_ORIGINS في Railway
+
+
+╔══════════════════════════════════════════════════════════╗
+║  حل المشاكل الشائعة                                      ║
+╚══════════════════════════════════════════════════════════╝
+
+مشكلة: "Socket CORS blocked"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  السبب: رابط Vercel غير مضاف في ALLOWED_ORIGINS
+  الحل: أضف الرابط الكامل في متغير ALLOWED_ORIGINS على Railway
+  مثال: https://twasol-abc123.vercel.app,https://*.vercel.app
+
+مشكلة: المكالمات لا تعمل (ICE failed)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  السبب: TURN server غير مُعد أو معطل
+  الحل: تحقق من REACT_APP_TURN_URL في Vercel env vars
+  اختبار: افتح https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/
+  → أضف TURN server → اضغط Gather → يجب أن يظهر "relay" candidates
+
+مشكلة: "JWT_SECRET must be set"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  السبب: لم تُعد JWT_SECRET على Railway
+  الحل: ولّد سر جديد وأضفه كمتغير بيئة
+
+مشكلة: "prisma db push" فشل
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  السبب: DATABASE_URL غير صحيح
+  الحل: تأكد من إضافة PostgreSQL plugin في Railway
+  → DATABASE_URL يُضاف تلقائياً
+
+مشكلة: الموقع يفتح لكن لا يحمّل البيانات
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  السبب: REACT_APP_API_URL خاطئ
+  الحل: تأكد أنه يشير لرابط Railway الصحيح (بدون / في النهاية)
+
+مشكلة: المكالمات تعمل على نفس الشبكة فقط
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  السبب: STUN فقط بدون TURN
+  الحل: تأكد من وجود TURN server صحيح في إعدادات Vercel
+
+
+╔══════════════════════════════════════════════════════════╗
+║  بنية النشر النهائية                                      ║
+╚══════════════════════════════════════════════════════════╝
+
+  ┌─────────────┐     HTTPS      ┌──────────────┐
+  │   المستخدم   │ ◄──────────► │   Vercel      │
+  │  (متصفح)    │               │  (Frontend)   │
+  └──────┬──────┘               └──────┬───────┘
+         │                              │
+         │  WebSocket + API             │  REACT_APP_API_URL
+         │                              │
+         └──────────┬───────────────────┘
+                    │
+                    ▼
+           ┌────────────────┐
+           │    Railway      │
+           │   (Backend)     │
+           │  Express +      │
+           │  Socket.IO +    │
+           │  Prisma         │
+           └───────┬────────┘
+                   │
+                   ▼
+           ┌────────────────┐
+           │  PostgreSQL     │
+           │  (Railway       │
+           │   Plugin)       │
+           └────────────────┘
+
+  المكالمات (WebRTC):
+  ┌─────────┐                    ┌─────────┐
+  │ متصفح A │ ◄──── TURN ─────► │ متصفح B │
+  └─────────┘   (metered.ca)     └─────────┘
+
+
+╔══════════════════════════════════════════════════════════╗
+║  التكلفة الشهرية المتوقعة                                 ║
+╚══════════════════════════════════════════════════════════╝
+
+  • Railway Hobby Plan:  $5/شهر (يشمل Backend + PostgreSQL)
+  • Vercel Free Tier:    $0 (يشمل Frontend + CDN + HTTPS)
+  • TURN (Metered.ca):   $0 حتى 500GB ثم ~$0.40/GB
+  ──────────────────────────────────────
+  المجموع: ~$5/شهر للبداية
+
+
+╔══════════════════════════════════════════════════════════╗
+║  سكربت سريع                                              ║
+╚══════════════════════════════════════════════════════════╝
+
+  بدلاً من الخطوات اليدوية، يمكنك تشغيل:
+
+    bash deploy-setup.sh
+
+  السكربت سيسألك عن الروابط ويجهز كل الملفات تلقائياً.

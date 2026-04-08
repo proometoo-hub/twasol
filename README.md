@@ -1,40 +1,54 @@
-## HTTPS local note
-Use `start-https.bat` for local-network camera/microphone access. Open the backend and frontend HTTPS URLs once and accept the self-signed certificate warning.
+# Twasol Pro v6.48.3
 
-# Twasol Pro v6.45.0 Final Delivery
+تطبيق تواصل ومحادثة متكامل — صوت، فيديو، رسائل، مجموعات، قصص، والمزيد.
 
-نسخة تسليم مرتبة من المشروع بعد جولات التحديث المتتابعة.
+## Quick Start (Local)
 
-## المكونات
-- `backend` خادم Express + Prisma + Socket.IO
-- `frontend` واجهة React
-- `electron` نسخة سطح المكتب
-- `mobile-app` نسخة Expo/WebView
+```bash
+# 1. PostgreSQL
+docker run -d --name twasol-pg -p 5432:5432 -e POSTGRES_PASSWORD=twasol -e POSTGRES_DB=twasol postgres:16
 
-## التشغيل السريع
-1. انسخ `backend/.env.example` إلى `backend/.env` وعدّل القيم الحساسة.
-2. شغّل `setup.bat` لأول مرة.
-3. للتشغيل الكامل استخدم `start-all.bat`.
+# 2. Generate JWT secret and put in backend/.env
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
-## أوامر مهمة
-- `setup.bat` تثبيت الحزم وتوليد Prisma وفتح المنافذ المحلية
-- `start.bat` تشغيل الويب فقط
-- `start-desktop.bat` تشغيل نسخة Electron
-- `start-mobile.bat` تشغيل نسخة الجوال
-- `stop.bat` إيقاف نوافذ التشغيل
+# 3. Backend
+cd backend && npm install && npx prisma db push && npm run dev
 
-## ملاحظات
-- هذه النسخة مخصصة للتشغيل المحلي أو داخل شبكة LAN.
-- يجب تغيير `JWT_SECRET` و`ADMIN_EMAILS` قبل أي استخدام فعلي.
-- نسخة الجوال الحالية تعتمد على WebView وتحتاج أن تكون الواجهة شغالة.
+# 4. Frontend (new terminal)
+cd frontend && npm install && npm start
+```
 
+Open http://localhost:3020
 
-## ميزات الذكاء اللغوي
-- ترجمة الرسائل أثناء المحادثة عبر `/api/ai/translate`
-- تحويل الصوت والفيديو إلى نص عبر `/api/ai/transcribe-from-url`
-- تحتاج هذه الميزات إلى ضبط `OPENAI_API_KEY` في `backend/.env`
+## Global Deployment (Railway + Vercel)
 
+See **DEPLOY_GLOBAL_GUIDE_AR.txt** for full guide, or run:
 
-## LAN default
-- Frontend: https://localhost:3020
-- Backend: https://localhost:4000
+```bash
+bash deploy-setup.sh
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, Socket.IO Client, Axios |
+| Backend | Express, TypeScript, Socket.IO, Prisma |
+| Database | PostgreSQL |
+| Desktop | Electron |
+| Mobile | React Native (Expo) |
+| Calls | WebRTC (STUN/TURN) |
+
+## Features
+
+- 💬 Real-time messaging (text, images, files, voice)
+- 📞 Voice & video calls (1:1 and group) via WebRTC
+- 👥 Groups & channels with admin controls
+- 📸 Stories (24h expiry)
+- 📊 Polls, scheduled messages, quick replies
+- 🔒 2FA, session management, ghost mode
+- 🌐 Multi-language (Arabic, English, +more)
+- 🤖 AI translation & transcription (optional)
+- 💰 Wallet system & commerce
+- 📱 Mobile app (Expo/React Native)
+- 🖥️ Desktop app (Electron)
