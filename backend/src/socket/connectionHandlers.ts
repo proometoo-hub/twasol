@@ -6,6 +6,10 @@ const onlineUsers = new Map<number, string>();
 export function setupConnectionHandlers(io: Server, socket: Socket, prisma: PrismaClient) {
   const userId = socket.data.userId;
   onlineUsers.set(userId, socket.id);
+
+  // CRITICAL: Join user-specific room so targeted events (calls, notifications) are received
+  socket.join(`user_${userId}`);
+
   prisma.user.update({ where: { id: userId }, data: { status: 'online' } }).catch(() => {});
   io.emit('user_status', { userId, status: 'online' });
 

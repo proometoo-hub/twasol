@@ -24,6 +24,11 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
   const pendingIceRef = useRef([]);
   const audioPlayUnlockRef = useRef(null);
   const iceRestartedRef = useRef(false);
+  const statusRef = useRef(status);
+  const mountedRef = useRef(true);
+
+  // Keep statusRef in sync
+  useEffect(() => { statusRef.current = status; }, [status]);
 
   const isLikelySecureMediaContext = () => {
     if (typeof window === 'undefined') return true;
@@ -52,17 +57,12 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     return stream;
   };
 
-
   const flushPendingIce = useCallback(async () => {
     if (!peerRef.current?.remoteDescription || !pendingIceRef.current.length) return;
     const queue = [...pendingIceRef.current];
     pendingIceRef.current = [];
     for (const raw of queue) {
-      try {
-        await peerRef.current.addIceCandidate(new RTCIceCandidate(raw));
-      } catch (err) {
-        console.warn('Buffered ICE failed:', err);
-      }
+      try { await peerRef.current.addIceCandidate(new RTCIceCandidate(raw)); } catch {}
     }
   }, []);
 
@@ -72,12 +72,8 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       pendingIceRef.current.push(candidate);
       return;
     }
-    try {
-      await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (err) {
-      console.warn('ICE add failed, buffering for retry:', err);
-      pendingIceRef.current.push(candidate);
-    }
+    try { await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch { pendingIceRef.current.push(candidate); }
   }, []);
 
   const registerPlaybackUnlock = useCallback(() => {
@@ -85,10 +81,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     const unlock = async () => {
       try {
         const element = remoteAudioRef.current;
-        if (element?.srcObject) {
-          const promise = element.play?.();
-          if (promise?.catch) await promise.catch(() => {});
-        }
+        if (element?.srcObject) { const p = element.play?.(); if (p?.catch) await p.catch(() => {}); }
       } catch {}
       document.removeEventListener('click', unlock);
       document.removeEventListener('touchstart', unlock);
@@ -99,132 +92,21 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     document.addEventListener('touchstart', unlock, { once: true });
   }, []);
 
-  const buildFallbackStream = () => {
-    const stream = new MediaStream();
-    localStreamRef.current = stream;
-    void attachStream(localVideoRef.current, stream, { muted: true });
-    setDeviceReady(false);
-    return stream;
-  };
-
   const describeMediaError = (err) => {
     const name = err?.name || '';
-    if (!navigator?.mediaDevices?.getUserMedia) return 'المتصفح أو الصفحة الحالية لا يسمحان بالوصول للكاميرا والمايك. سنكمل بدون أجهزة محلية.';
-    if (!isLikelySecureMediaContext()) return 'هذا العنوان ليس Secure Context في المتصفح، لذلك قد يتم منع الكاميرا أو الميكروفون. سنكمل الاتصال بدون أجهزة محلية.';
-    if (name === 'NotAllowedError' || name === 'SecurityError') return 'تم رفض إذن الكاميرا أو الميكروفون. يمكنك متابعة الاتصال والكتابة من داخل المحادثة.';
-    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return 'لا توجد كاميرا أو ميكروفون متاحان. سنكمل الاتصال بدون وسائط محلية.';
-    if (name === 'NotReadableError' || name === 'TrackStartError') return 'الكاميرا أو الميكروفون مشغولان من برنامج آخر. سنكمل الاتصال بدون وسائط محلية.';
-    return 'تعذر تجهيز الكاميرا أو الميكروفون، لكن يمكنك متابعة الاتصال والكتابة من داخل المحادثة.';
+    if (!navigator?.mediaDevices?.getUserMedia) return 'المتصفح لا يدعم الوصول للكاميرا/المايك. سنكمل الاتصال بدون أجهزة محلية — يمكنك سماع الطرف الآخر.';
+    if (!isLikelySecureMediaContext()) return 'هذا العنوان ليس آمناً (HTTPS مطلوب). سنكمل الاتصال — يمكنك سماع الطرف الآخر.';
+    if (name === 'NotAllowedError' || name === 'SecurityError') return 'تم رفض إذن الكاميرا/المايك. المكالمة مستمرة — يمكنك سماع الطرف الآخر.';
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return 'لا توجد كاميرا أو ميكروفون. المكالمة مستمرة — يمكنك سماع الطرف الآخر.';
+    if (name === 'NotReadableError' || name === 'TrackStartError') return 'الكاميرا/المايك مشغولان. المكالمة مستمرة — يمكنك سماع الطرف الآخر.';
+    return 'تعذر تجهيز الكاميرا/المايك. المكالمة مستمرة — يمكنك سماع الطرف الآخر.';
   };
 
-  useEffect(() => {
-    if (!isIncoming) initiateCall();
-
-    socket.on('call_answered', async ({ signal }) => {
-      try {
-        if (peerRef.current) {
-          await peerRef.current.setRemoteDescription(new RTCSessionDescription(signal));
-          await flushPendingIce();
-          setStatus('connecting');
-        }
-      } catch (err) { console.error('Answer error:', err); }
-    });
-
-    socket.on('call_rejected', () => { setStatus('rejected'); setTimeout(onClose, 1500); });
-    socket.on('call_ended', () => { cleanup(); onClose(); });
-    socket.on('ice_candidate', async ({ candidate }) => {
-      try {
-        await queueOrApplyIce(candidate);
-      } catch (err) { console.error('ICE error:', err); }
-    });
-
-    return () => {
-      cleanup();
-      socket.off('call_answered');
-      socket.off('call_rejected');
-      socket.off('call_ended');
-      socket.off('ice_candidate');
-    };
-  }, []);
-
-  const buildPeer = (stream) => {
-    const pc = new RTCPeerConnection(RTC_CONFIGURATION);
-    peerRef.current = pc;
-    const tracks = stream?.getTracks?.() || [];
-    const audioTrack = tracks.find(track => track.kind === 'audio');
-    const videoTrack = tracks.find(track => track.kind === 'video');
-    if (audioTrack) { audioTrack.enabled = true; pc.addTrack(audioTrack, stream); }
-    else pc.addTransceiver('audio', { direction: 'recvonly' });
-    if (callType === 'video') {
-      if (videoTrack) { videoTrack.enabled = true; pc.addTrack(videoTrack, stream); }
-      else pc.addTransceiver('video', { direction: 'recvonly' });
-    }
-    pc.onicecandidate = (e) => {
-      if (e.candidate) socket.emit('ice_candidate', { targetUserId: targetUser.id, candidate: e.candidate });
-    };
-    pc.ontrack = (e) => {
-      const remoteStream = buildTrackStream(e, remoteStreamRef);
-      void attachStream(remoteVideoRef.current, remoteStream);
-      void attachStream(remoteAudioRef.current, remoteStream);
-      registerPlaybackUnlock();
-    };
-    pc.onconnectionstatechange = () => {
-      const state = pc.connectionState || 'new';
-      setConnectionState(state);
-      if (state === 'connected') {
-        setQuality('جيدة');
-        setStatus('connected');
-        if (!timerRef.current) startTimer();
-      } else if (state === 'connecting' || state === 'new') {
-        setQuality('جارٍ الربط');
-        if (status !== 'incoming') setStatus('connecting');
-      } else if (state === 'disconnected') {
-        setQuality('ضعيفة');
-        setStatus('reconnecting');
-        if (!iceRestartedRef.current) {
-          iceRestartedRef.current = true;
-          setTimeout(() => { try { pc.restartIce?.(); } catch {} }, 1200);
-        }
-      } else if (state === 'failed') {
-        if (!iceRestartedRef.current) {
-          iceRestartedRef.current = true;
-          try { pc.restartIce?.(); } catch {}
-        }
-        setQuality('فشلت المحاولة');
-        setPermissionError(prev => prev || (HAS_TURN_SERVER ? 'فشل الربط الصوتي/المرئي. يمكنك الرجوع إلى المحادثة ومتابعة الكتابة.' : 'فشل تأسيس الوسائط. الإعداد الحالي يستخدم STUN فقط، وهذا يفشل كثيرًا خارج نفس الشبكة. أضف TURN server في متغيرات الواجهة ثم أعد النشر.'));
-        setStatus('error');
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      const iceState = pc.iceConnectionState || 'new';
-      if (iceState === 'connected' || iceState === 'completed') {
-        setConnectionState('connected');
-        setStatus('connected');
-        setQuality('جيدة');
-        if (!timerRef.current) startTimer();
-      } else if (iceState === 'checking') {
-        setConnectionState('checking');
-        if (status !== 'incoming') setStatus('connecting');
-      } else if (iceState === 'failed') {
-        if (!iceRestartedRef.current) {
-          iceRestartedRef.current = true;
-          try { pc.restartIce?.(); } catch {}
-        }
-        setConnectionState('failed');
-        setStatus('error');
-        setQuality('فشلت المحاولة');
-        setPermissionError(prev => prev || (HAS_TURN_SERVER ? 'فشل الربط الصوتي/المرئي. تأكد من الثقة بالشهادة ومن منح إذن الكاميرا والمايك ثم أعد المحاولة.' : 'فشل تأسيس الاتصال بعد تبادل الإشارات. السبب المرجح أن التطبيق يعمل حاليًا بـ STUN فقط بدون TURN server، وهذا لا يكفي على Vercel/Railway أو بين شبكات مختلفة.'));
-      }
-    };
-    return pc;
-  };
-
-  const getMedia = async () => {
+  const getMediaSafe = async () => {
     if (!navigator?.mediaDevices?.getUserMedia) {
-      const message = describeMediaError();
-      setPermissionError(message);
-      throw new Error(message);
+      setPermissionError(describeMediaError());
+      setDeviceReady(false);
+      return new MediaStream();
     }
 
     const tunedAudio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -240,7 +122,6 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
           { audio: tunedAudio, video: false },
         ];
 
-    let lastError = null;
     for (const constraints of attempts) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -248,53 +129,140 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
         localStreamRef.current = stream;
         setDeviceReady(!!stream.getTracks().length);
         setPermissionError(
-          constraints.audio && constraints.video
-            ? ''
-            : constraints.audio
-              ? 'تم الاتصال بالميكروفون فقط، ويمكن متابعة المكالمة بشكل طبيعي.'
-              : 'تم الاتصال بالكاميرا فقط، ويمكن متابعة المكالمة بشكل طبيعي.'
+          constraints.audio && constraints.video ? ''
+            : constraints.audio ? 'ميكروفون فقط — المكالمة تعمل بشكل طبيعي.'
+            : 'كاميرا فقط — المكالمة تعمل بشكل طبيعي.'
         );
         void attachStream(localVideoRef.current, stream, { muted: true });
         return stream;
-      } catch (err) {
-        lastError = err;
-      }
+      } catch {}
     }
 
-    const message = describeMediaError(lastError);
-    setPermissionError(message);
-    throw lastError || new Error(message);
+    // All attempts failed — return empty stream so call still works (receive-only)
+    const fallback = new MediaStream();
+    localStreamRef.current = fallback;
+    setDeviceReady(false);
+    setPermissionError(describeMediaError({ name: 'NotFoundError' }));
+    return fallback;
+  };
+
+  const buildPeer = (stream) => {
+    const pc = new RTCPeerConnection(RTC_CONFIGURATION);
+    peerRef.current = pc;
+    const tracks = stream?.getTracks?.() || [];
+    const audioTrack = tracks.find(t => t.kind === 'audio');
+    const videoTrack = tracks.find(t => t.kind === 'video');
+
+    if (audioTrack) { audioTrack.enabled = true; pc.addTrack(audioTrack, stream); }
+    else pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    if (callType === 'video') {
+      if (videoTrack) { videoTrack.enabled = true; pc.addTrack(videoTrack, stream); }
+      else pc.addTransceiver('video', { direction: 'recvonly' });
+    }
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) socket.emit('ice_candidate', { targetUserId: targetUser.id, candidate: e.candidate });
+    };
+    pc.ontrack = (e) => {
+      const remoteStream = buildTrackStream(e, remoteStreamRef);
+      void attachStream(remoteVideoRef.current, remoteStream);
+      void attachStream(remoteAudioRef.current, remoteStream);
+      registerPlaybackUnlock();
+    };
+
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState || 'new';
+      if (!mountedRef.current) return;
+      setConnectionState(state);
+      if (state === 'connected') {
+        setQuality('جيدة');
+        setStatus('connected');
+        if (!timerRef.current) startTimer();
+      } else if (state === 'connecting' || state === 'new') {
+        setQuality('جارٍ الربط');
+        if (statusRef.current !== 'incoming') setStatus('connecting');
+      } else if (state === 'disconnected') {
+        setQuality('ضعيفة');
+        setStatus('reconnecting');
+        if (!iceRestartedRef.current) {
+          iceRestartedRef.current = true;
+          setTimeout(() => { try { pc.restartIce?.(); } catch {} }, 1200);
+        }
+      } else if (state === 'failed') {
+        if (!iceRestartedRef.current) {
+          iceRestartedRef.current = true;
+          try { pc.restartIce?.(); } catch {}
+        }
+        setQuality('فشلت المحاولة');
+        setPermissionError(prev => prev || (HAS_TURN_SERVER
+          ? 'فشل الربط الصوتي/المرئي. تأكد من إعدادات الشبكة وأعد المحاولة.'
+          : 'فشل الاتصال — لا يوجد TURN server. أضف TURN server في إعدادات الواجهة لإجراء مكالمات عبر شبكات مختلفة.'));
+        setStatus('error');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const iceState = pc.iceConnectionState || 'new';
+      if (!mountedRef.current) return;
+      if (iceState === 'connected' || iceState === 'completed') {
+        setConnectionState('connected');
+        setStatus('connected');
+        setQuality('جيدة');
+        if (!timerRef.current) startTimer();
+      } else if (iceState === 'checking') {
+        setConnectionState('checking');
+        if (statusRef.current !== 'incoming') setStatus('connecting');
+      } else if (iceState === 'failed') {
+        if (!iceRestartedRef.current) {
+          iceRestartedRef.current = true;
+          try { pc.restartIce?.(); } catch {}
+        }
+        setConnectionState('failed');
+        setStatus('error');
+        setQuality('فشلت المحاولة');
+        setPermissionError(prev => prev || (HAS_TURN_SERVER
+          ? 'فشل الربط. تأكد من الثقة بالشهادة ومنح إذن الكاميرا والمايك.'
+          : 'فشل الاتصال — التطبيق يعمل بـ STUN فقط بدون TURN server. أضف TURN server للمكالمات عبر شبكات مختلفة.'));
+      }
+    };
+    return pc;
   };
 
   const initiateCall = async () => {
+    clearTimeout(unansweredTimerRef.current);
+    iceRestartedRef.current = false;
+
+    // Always get media — getMediaSafe never throws, returns empty stream on failure
+    const stream = await getMediaSafe();
+    const pc = buildPeer(stream);
+    setStatus('connecting');
+
     try {
-      clearTimeout(unansweredTimerRef.current);
-      const stream = await getMedia();
-      const pc = buildPeer(stream);
-      iceRestartedRef.current = false;
-      setStatus('connecting');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('call_user', { targetUserId: targetUser.id, signal: offer, callType });
+
       unansweredTimerRef.current = setTimeout(() => {
-        if (status === 'calling') {
+        if (statusRef.current === 'calling' || statusRef.current === 'connecting') {
           setStatus('missed');
-          setTimeout(onClose, 1500);
+          setTimeout(onClose, 2000);
         }
       }, 30000);
     } catch (err) {
-      console.error('Call init error:', err);
-      setPermissionError(describeMediaError(err));
+      console.error('Call offer error:', err);
       setStatus('error');
+      setPermissionError('فشل إنشاء عرض الاتصال. أعد المحاولة.');
     }
   };
 
   const answerCall = async () => {
+    const stream = await getMediaSafe();
+    const pc = buildPeer(stream);
+    iceRestartedRef.current = false;
+    setStatus('connecting');
+
     try {
-      const stream = await getMedia();
-      const pc = buildPeer(stream);
-      iceRestartedRef.current = false;
-      setStatus('connecting');
       await pc.setRemoteDescription(new RTCSessionDescription(incomingSignal));
       await flushPendingIce();
       const answer = await pc.createAnswer();
@@ -302,46 +270,36 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       socket.emit('answer_call', { targetUserId: targetUser.id, signal: answer });
     } catch (err) {
       console.error('Answer error:', err);
-      setPermissionError(describeMediaError(err));
       setStatus('error');
+      setPermissionError('فشل الرد على المكالمة. أعد المحاولة.');
     }
   };
 
-  const rejectCall = () => {
-    socket.emit('reject_call', { targetUserId: targetUser.id });
-    onClose();
-  };
-
-  const endCall = () => {
-    socket.emit('end_call', { targetUserId: targetUser.id });
-    cleanup();
-    onClose();
-  };
-
-  const goBackToChat = () => {
-    cleanup();
-    onClose();
-  };
+  const rejectCall = () => { socket.emit('reject_call', { targetUserId: targetUser.id }); onClose(); };
+  const endCall = () => { socket.emit('end_call', { targetUserId: targetUser.id }); cleanup(); onClose(); };
+  const goBackToChat = () => { cleanup(); onClose(); };
 
   const retryCall = async () => {
     cleanup();
     setStatus('calling');
     setTimer(0);
     setQuality('جاري الفحص');
+    setPermissionError('');
+    setConnectionState('new');
     await initiateCall();
   };
 
   const toggleMute = () => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) { audioTrack.enabled = !audioTrack.enabled; setMuted(!muted); }
+      if (audioTrack) { audioTrack.enabled = !audioTrack.enabled; setMuted(!audioTrack.enabled); }
     }
   };
 
   const toggleVideo = () => {
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) { videoTrack.enabled = !videoTrack.enabled; setVideoOff(!videoOff); }
+      if (videoTrack) { videoTrack.enabled = !videoTrack.enabled; setVideoOff(!videoTrack.enabled); }
     }
   };
 
@@ -353,8 +311,9 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
   const cleanup = () => {
     clearTimeout(unansweredTimerRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
     if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
-    if (peerRef.current) peerRef.current.close();
+    if (peerRef.current) { try { peerRef.current.close(); } catch {} }
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
@@ -369,6 +328,42 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       audioPlayUnlockRef.current = null;
     }
   };
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    if (!isIncoming) initiateCall();
+
+    const onCallAnswered = async ({ signal }) => {
+      try {
+        if (peerRef.current) {
+          await peerRef.current.setRemoteDescription(new RTCSessionDescription(signal));
+          await flushPendingIce();
+          setStatus('connecting');
+        }
+      } catch (err) { console.error('Answer set error:', err); }
+    };
+
+    const onCallRejected = () => { setStatus('rejected'); setTimeout(onClose, 1500); };
+    const onCallEnded = () => { cleanup(); onClose(); };
+    const onIceCandidate = async ({ candidate }) => {
+      try { await queueOrApplyIce(candidate); } catch {}
+    };
+
+    socket.on('call_answered', onCallAnswered);
+    socket.on('call_rejected', onCallRejected);
+    socket.on('call_ended', onCallEnded);
+    socket.on('ice_candidate', onIceCandidate);
+
+    return () => {
+      mountedRef.current = false;
+      cleanup();
+      socket.off('call_answered', onCallAnswered);
+      socket.off('call_rejected', onCallRejected);
+      socket.off('call_ended', onCallEnded);
+      socket.off('ice_candidate', onIceCandidate);
+    };
+  }, []);
 
   const formatTimer = (s) => {
     const m = Math.floor(s / 60);
@@ -416,10 +411,10 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
           <div className="call-status">{statusText[status]}</div>
           <div className="call-diagnostics">
             <div className={`live-pill ${deviceReady ? 'ok' : 'bad'}`}><Camera size={14} /> {callType === 'video' ? 'كاميرا/ميكروفون' : 'ميكروفون'}: {deviceReady ? 'جاهز' : 'غير جاهز'}</div>
-            <div className={`live-pill ${(connectionState === 'connected' || connectionState === 'connecting') ? 'ok' : 'bad'}`}>{(connectionState === 'connected' || connectionState === 'connecting') ? <Wifi size={14} /> : <WifiOff size={14} />} {quality}</div>
+            <div className={`live-pill ${(connectionState === 'connected' || connectionState === 'connecting' || connectionState === 'checking') ? 'ok' : 'bad'}`}>{(connectionState === 'connected' || connectionState === 'connecting' || connectionState === 'checking') ? <Wifi size={14} /> : <WifiOff size={14} />} {quality}</div>
           </div>
           {permissionError ? <div className="call-error">{permissionError}</div> : null}
-          {status === 'error' ? <div className="call-error" style={{ marginTop: 8 }}>يمكنك العودة الآن إلى المحادثة ومتابعة التواصل بالكتابة ثم إعادة المحاولة لاحقًا.</div> : null}
+          {status === 'error' ? <div className="call-error" style={{ marginTop: 8 }}>يمكنك العودة إلى المحادثة ومتابعة التواصل بالكتابة ثم إعادة المحاولة لاحقاً.</div> : null}
           {status === 'connected' && <div className="call-timer">{formatTimer(timer)}</div>}
           <video ref={localVideoRef} style={{ display: 'none' }} autoPlay playsInline muted />
           <video ref={remoteVideoRef} style={{ display: 'none' }} autoPlay playsInline />
@@ -432,10 +427,10 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
                 <button className="call-btn call-btn-accept" onClick={answerCall}><Phone size={28} /></button>
               </>
             )}
-            {status === 'calling' && (
+            {(status === 'calling' || status === 'connecting') && (
               <button className="call-btn call-btn-end" onClick={endCall}><PhoneOff size={28} /></button>
             )}
-            {status === 'connected' && (
+            {(status === 'connected' || status === 'reconnecting') && (
               <>
                 <button className="call-btn" style={{ background: muted ? 'var(--danger)' : 'var(--bg-tertiary)' }} onClick={toggleMute}>
                   {muted ? <MicOff size={24} color="white" /> : <Mic size={24} color="white" />}
@@ -444,7 +439,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
                 <button className="call-btn call-btn-end" onClick={endCall}><PhoneOff size={24} /></button>
               </>
             )}
-            {(status === 'error' || status === 'missed') && (
+            {(status === 'error' || status === 'missed' || status === 'rejected') && (
               <>
                 <button className="call-btn call-btn-accept" onClick={retryCall} title="إعادة المحاولة"><RefreshCw size={24} /></button>
                 <button className="call-btn" onClick={goBackToChat} title="العودة إلى المحادثة"><MessageSquare size={24} color="white" /></button>

@@ -14,12 +14,7 @@ export interface AuthRequest extends Request {
 async function resolveSession(token: string) {
   const hashed = hashSessionToken(token);
   return prisma.session.findFirst({
-    where: {
-      OR: [
-        { token: hashed },
-        { token },
-      ],
-    },
+    where: { token: hashed },
   });
 }
 

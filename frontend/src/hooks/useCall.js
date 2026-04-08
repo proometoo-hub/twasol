@@ -13,14 +13,14 @@ export default function useCall(conversations) {
     const socket = socketRef.current;
     if (!socket || !user) return;
 
-    const onIncoming = ({ callerId, signal, callType }) => {
+    const onIncoming = ({ callerId, signal, callType, conversationId }) => {
       let callerInfo = null;
       for (const c of conversations) {
         const m = c.members?.find(m => m.userId === callerId);
         if (m) { callerInfo = m.user; break; }
       }
       if (!callerInfo) callerInfo = { id: callerId, name: 'User', avatar: '' };
-      setCallData({ mode: 'direct', targetUser: callerInfo, callType, isIncoming: true, incomingSignal: signal, startedAt: new Date().toISOString() });
+      setCallData({ mode: 'direct', targetUser: callerInfo, callType, isIncoming: true, incomingSignal: signal, conversationId, startedAt: new Date().toISOString() });
       playNotif();
     };
 
@@ -28,21 +28,24 @@ export default function useCall(conversations) {
       const conversation = conversations.find(c => c.id === conversationId);
       if (!conversation) return;
       const callerInfo = conversation.members?.find(m => m.userId === callerId)?.user || { id: callerId, name: 'مشرف الاتصال' };
-      setCallData({ mode: 'group', conversation, callType, isIncoming: true, callerInfo, startedAt: new Date().toISOString() });
+      setCallData({ mode: 'group', conversation, callType, isIncoming: true, callerInfo, conversationId, startedAt: new Date().toISOString() });
       playNotif();
     };
 
     const clear = () => setCallData(prev => prev ? { ...prev, endedAt: new Date().toISOString() } : null);
+    const clearFull = () => setCallData(null);
 
     socket.on('incoming_call', onIncoming);
     socket.on('incoming_group_call', onIncomingGroup);
     socket.on('call_rejected', clear);
-    socket.on('call_ended', clear);
+    socket.on('call_ended', clearFull);
+    socket.on('native_call_end', clearFull);
     return () => {
       socket.off('incoming_call', onIncoming);
       socket.off('incoming_group_call', onIncomingGroup);
       socket.off('call_rejected', clear);
-      socket.off('call_ended', clear);
+      socket.off('call_ended', clearFull);
+      socket.off('native_call_end', clearFull);
     };
   }, [socketRef, conversations, playNotif, user]);
 

@@ -1,0 +1,143 @@
+============================================================
+  Twasol Pro v6.48.3 — تقرير الإصلاحات الشامل
+  تاريخ: 2026-04-08
+============================================================
+
+██ إصلاح حرج #1: المكالمات لا تعمل أبداً
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: backend/src/socket/connectionHandlers.ts
+
+المشكلة: عند اتصال المستخدم بالـ Socket، لم يكن ينضم لغرفة
+         `user_${userId}` الخاصة به. جميع أحداث المكالمات والرسائل
+         تُرسل عبر `io.to('user_${targetUserId}')` — بدون الانضمام
+         لهذه الغرفة، لا يصل أي حدث للمستخدم المستهدف.
+
+         هذا يعني أن: المكالمات الواردة، الرسائل الجديدة، الإشعارات،
+         أحداث الكتابة، وكل شيء يعتمد على غرف المستخدمين كان لا يعمل
+         إلا إذا كان يُرسل عبر broadcast عام.
+
+الحل: أضفنا `socket.join('user_${userId}')` فوراً عند الاتصال.
+
+
+██ إصلاح حرج #2: TURN Server مفقود
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: frontend/src/utils/webrtcConfig.js
+
+المشكلة: WebRTC يحتاج TURN server للعمل عبر شبكات مختلفة (مثلاً
+         عندما يكون المتصل والمستقبل على شبكات WiFi مختلفة أو أحدهم
+         على 4G). بدون TURN، المكالمات تعمل فقط على نفس الشبكة المحلية.
+         الكود الأصلي لم يكن يضيف أي TURN server افتراضي.
+
+الحل: - أضفنا Open Relay TURN server مجاني كـ fallback تلقائي
+      - أضفنا عدة STUN servers للموثوقية
+      - أضفنا iceCandidatePoolSize: 10 لتسريع الاتصال
+      - أضفنا إعدادات TURN في frontend/.env
+
+
+██ إصلاح حرج #3: JWT_SECRET مكشوف
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: backend/.env
+
+المشكلة: ملف .env كان يحتوي JWT_SECRET حقيقي ثابت موزع مع المشروع.
+         أي شخص يملك هذا السر يستطيع تزوير توكنات JWT لأي مستخدم.
+
+الحل: استبدلناه بنص تحذيري يجبر المستخدم على توليد سر جديد قبل التشغيل.
+      الكود في config.ts يرفض التشغيل إذا لم يُغيَّر السر.
+
+
+██ إصلاح حرج #4: DATABASE_URL خاطئ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: backend/.env
+
+المشكلة: الـ schema.prisma يطلب provider = "postgresql" لكن .env كان
+         يحتوي DATABASE_URL="file:./dev.db" وهو صيغة SQLite.
+         هذا يسبب خطأ فوري عند تشغيل prisma generate أو db push.
+
+الحل: غيّرنا DATABASE_URL لصيغة PostgreSQL صحيحة.
+
+
+██ إصلاح أمني #5: Session Token Fallback
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: backend/src/middleware/auth.ts
+
+المشكلة: resolveSession كان يبحث عن التوكن بالـ hash وبالنص العادي
+         (OR query). هذا يعني أن التوكن المخزن كـ hash لا قيمة أمنية
+         له لأن التوكن الخام يعمل أيضاً.
+
+الحل: أزلنا البحث بالنص العادي — الآن فقط التوكن المُهَشّ يُقبل.
+
+
+██ إصلاح #6: CallModal — مشاكل متعددة
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: frontend/src/components/CallModal.js
+
+المشاكل المُصلحة:
+  1. getMedia كان يرمي exception عند فشل الأجهزة → المكالمة تموت فوراً.
+     الآن: getMediaSafe لا يرمي أبداً — يعيد MediaStream فارغ ويستمر.
+     المكالمة تعمل بوضع استقبال فقط (يسمع الطرف الآخر).
+
+  2. status كان يُقرأ داخل setTimeout كـ stale closure.
+     الآن: نستخدم statusRef.current للقيم المحدّثة.
+
+  3. cleanup لم يكن يتعامل مع pc.close() بـ try/catch.
+     الآن: كل cleanup محمي من الأخطاء.
+
+  4. حالة 'connecting' لم تكن تظهر زر إنهاء المكالمة.
+     الآن: أزرار التحكم تظهر في حالتي calling و connecting.
+
+  5. حالة 'reconnecting' لم تكن تظهر أزرار التحكم.
+     الآن: connected و reconnecting يظهران أزرار mute/video/end.
+
+  6. إضافة mountedRef لمنع setState بعد unmount.
+
+
+██ إصلاح #7: useCall — أحداث مفقودة
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: frontend/src/hooks/useCall.js
+
+المشاكل المُصلحة:
+  1. لم يكن يستمع لـ native_call_end → المكالمة لا تُغلق تلقائياً.
+  2. call_ended كان يعمل clear (يحتفظ بالبيانات مع endedAt) بدلاً من
+     clearFull (يمسح كل شيء) → واجهة المكالمة تبقى ظاهرة.
+  3. conversationId لم يُمرر مع بيانات المكالمة.
+
+
+██ إصلاح #8: مفتاح SSL خاص مُوزّع
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: certs/https/11.0.0.103/server.key.pem
+
+المشكلة: المفتاح الخاص للـ SSL كان موجوداً في الملف المضغوط.
+الحل: تم حذفه. يجب على كل مستخدم توليد شهاداته الخاصة.
+
+
+██ إصلاح #9: webrtcConfig محسّن
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+الملف: frontend/src/utils/webrtcConfig.js
+
+التحسينات:
+  - 4 STUN servers بدلاً من واحد (للموثوقية)
+  - TURN server مجاني كـ fallback تلقائي (openrelay.metered.ca)
+  - iceCandidatePoolSize: 10 لتسريع تبادل ICE candidates
+  - iceTransportPolicy: 'all' لاستخدام كل المسارات المتاحة
+
+
+============================================================
+  خطوات التشغيل
+============================================================
+
+1. ثبّت PostgreSQL محلياً أو عبر Docker:
+   docker run -d --name twasol-pg -p 5432:5432 \
+     -e POSTGRES_PASSWORD=twasol -e POSTGRES_DB=twasol postgres:16
+
+2. ولّد JWT_SECRET جديد:
+   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+   ثم ضعه في backend/.env
+
+3. ثبّت الحزم وشغّل:
+   cd backend && npm install && npx prisma db push && npm run dev
+   cd frontend && npm install && npm start
+
+4. للمكالمات عبر شبكات مختلفة:
+   - TURN server مجاني مضاف تلقائياً (openrelay.metered.ca)
+   - للإنتاج: احصل على TURN خاص من metered.ca أو twilio أو xirsys
+   - عدّل frontend/.env بإعدادات TURN الخاصة بك

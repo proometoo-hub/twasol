@@ -74,7 +74,7 @@ router.post('/logout', async (req: any, res) => {
     const token = req.headers['authorization']?.split(' ')[1];
     if (token) {
       const hashed = hashSessionToken(token);
-      await prisma.session.deleteMany({ where: { OR: [{ token: hashed }, { token }] } });
+      await prisma.session.deleteMany({ where: { token: hashed } });
     }
     res.json({ success: true });
   } catch { res.status(500).json({ error: 'Server error' }); }
