@@ -96,6 +96,7 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
   const localStreamRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const peersRef = useRef({});
+  const pendingIceRef = useRef({});
   const remoteStreamsRef = useRef({});
   const audioAnalyzersRef = useRef({});
   const [, forceRender] = useState(0);
@@ -246,10 +247,34 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
       return stream;
     };
 
+    const flushPeerIce = async (targetUserId) => {
+      const pc = peersRef.current[targetUserId];
+      const queue = pendingIceRef.current[targetUserId] || [];
+      if (!pc?.remoteDescription || !queue.length) return;
+      pendingIceRef.current[targetUserId] = [];
+      for (const candidate of queue) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (err) { console.warn('group buffered ICE failed', err); }
+      }
+    };
+
+    const queueOrApplyPeerIce = async (targetUserId, candidate) => {
+      if (!candidate) return;
+      const pc = peersRef.current[targetUserId];
+      if (!pc || !pc.remoteDescription) {
+        pendingIceRef.current[targetUserId] = [...(pendingIceRef.current[targetUserId] || []), candidate];
+        return;
+      }
+      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+      catch (err) {
+        pendingIceRef.current[targetUserId] = [...(pendingIceRef.current[targetUserId] || []), candidate];
+      }
+    };
+
     const createPeer = async (targetUserId, makeOffer = true) => {
       if (peersRef.current[targetUserId]) return peersRef.current[targetUserId];
       const pc = new RTCPeerConnection(RTC_CONFIGURATION);
       peersRef.current[targetUserId] = pc;
+      pendingIceRef.current[targetUserId] = pendingIceRef.current[targetUserId] || [];
       const localTracks = localStreamRef.current?.getTracks?.() || [];
       const audioTrack = localTracks.find(track => track.kind === 'audio');
       const videoTrack = localTracks.find(track => track.kind === 'video');
@@ -281,7 +306,7 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
       if (!incoming) {
         socket.emit('group_call_start', { conversationId: conversation.id, callType, effectMode });
         socket.emit('join_group_call', { conversationId: conversation.id, callType, effectMode });
-        setStatus('connected');
+        setStatus('connecting');
       }
     };
 
@@ -291,7 +316,7 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
       if (!incoming) {
         socket.emit('group_call_start', { conversationId: conversation.id, callType, effectMode });
         socket.emit('join_group_call', { conversationId: conversation.id, callType, effectMode });
-        setStatus('connected');
+        setStatus('connecting');
       }
       setConnectionHint('المكالمة مستمرة بدون كاميرا أو مايك محلي');
     });
@@ -309,6 +334,7 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
       if (conversationId !== conversation.id) return;
       setPresentIds(prev => new Set(Array.from(prev).filter(v => v !== leftId)));
       if (peersRef.current[leftId]) { peersRef.current[leftId].close(); delete peersRef.current[leftId]; }
+      delete pendingIceRef.current[leftId];
       delete remoteStreamsRef.current[leftId];
       forceRender(v => v + 1);
     };
@@ -316,6 +342,7 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
       if (conversationId !== conversation.id || callerId === user?.id) return;
       const pc = await createPeer(callerId, false);
       await pc.setRemoteDescription(new RTCSessionDescription(signal));
+      await flushPeerIce(callerId);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('group_call_answer', { conversationId: conversation.id, targetUserId: callerId, signal: answer });
@@ -326,11 +353,12 @@ export default function GroupCallModal({ socket, conversation, user, callType = 
     const onAnswer = async ({ conversationId, userId: remoteId, signal }) => {
       if (conversationId !== conversation.id || !peersRef.current[remoteId]) return;
       await peersRef.current[remoteId].setRemoteDescription(new RTCSessionDescription(signal));
+      await flushPeerIce(remoteId);
       setPresentIds(prev => new Set([...Array.from(prev), remoteId]));
     };
     const onIce = async ({ conversationId, userId: remoteId, candidate }) => {
-      if (conversationId !== conversation.id || !peersRef.current[remoteId]) return;
-      try { await peersRef.current[remoteId].addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+      if (conversationId !== conversation.id) return;
+      await queueOrApplyPeerIce(remoteId, candidate);
     };
     const onEffect = ({ conversationId, userId: remoteId, effectMode }) => {
       if (conversationId !== conversation.id) return;

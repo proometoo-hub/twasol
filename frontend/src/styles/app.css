@@ -2077,3 +2077,6 @@ body {
   .mobile-topbar-copy h1 { font-size: 22px; }
   .mobile-status-badge { display:none; }
 }
+
+.composer-error-inline { margin-top: 8px; padding: 9px 12px; border-radius: 12px; background: rgba(239,68,68,.12); color: #fecaca; font-size: 13px; cursor: pointer; }
+.spin { animation: spin 1s linear infinite; }

@@ -1,6 +1,6 @@
 {
   "name": "twasol-pro-backend",
-  "version": "6.48.2",
+  "version": "6.48.3",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",

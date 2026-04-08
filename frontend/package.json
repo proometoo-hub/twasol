@@ -1,6 +1,6 @@
 {
   "name": "twasol-pro-frontend",
-  "version": "6.48.2",
+  "version": "6.48.3",
   "private": true,
   "dependencies": {
     "axios": "^1.6.0",

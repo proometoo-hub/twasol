@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, RefreshCw, Wifi, WifiOff, Gauge, Camera, MessageSquare } from 'lucide-react';
 import { buildAssetUrl } from '../api';
 import { RTC_CONFIGURATION, HAS_TURN_SERVER } from '../utils/webrtcConfig';
@@ -21,6 +21,9 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
   const remoteStreamRef = useRef(null);
   const timerRef = useRef(null);
   const unansweredTimerRef = useRef(null);
+  const pendingIceRef = useRef([]);
+  const audioPlayUnlockRef = useRef(null);
+  const iceRestartedRef = useRef(false);
 
   const isLikelySecureMediaContext = () => {
     if (typeof window === 'undefined') return true;
@@ -49,6 +52,53 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     return stream;
   };
 
+
+  const flushPendingIce = useCallback(async () => {
+    if (!peerRef.current?.remoteDescription || !pendingIceRef.current.length) return;
+    const queue = [...pendingIceRef.current];
+    pendingIceRef.current = [];
+    for (const raw of queue) {
+      try {
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(raw));
+      } catch (err) {
+        console.warn('Buffered ICE failed:', err);
+      }
+    }
+  }, []);
+
+  const queueOrApplyIce = useCallback(async (candidate) => {
+    if (!candidate) return;
+    if (!peerRef.current || !peerRef.current.remoteDescription) {
+      pendingIceRef.current.push(candidate);
+      return;
+    }
+    try {
+      await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.warn('ICE add failed, buffering for retry:', err);
+      pendingIceRef.current.push(candidate);
+    }
+  }, []);
+
+  const registerPlaybackUnlock = useCallback(() => {
+    if (audioPlayUnlockRef.current) return;
+    const unlock = async () => {
+      try {
+        const element = remoteAudioRef.current;
+        if (element?.srcObject) {
+          const promise = element.play?.();
+          if (promise?.catch) await promise.catch(() => {});
+        }
+      } catch {}
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('touchstart', unlock);
+      audioPlayUnlockRef.current = null;
+    };
+    audioPlayUnlockRef.current = unlock;
+    document.addEventListener('click', unlock, { once: true });
+    document.addEventListener('touchstart', unlock, { once: true });
+  }, []);
+
   const buildFallbackStream = () => {
     const stream = new MediaStream();
     localStreamRef.current = stream;
@@ -74,6 +124,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       try {
         if (peerRef.current) {
           await peerRef.current.setRemoteDescription(new RTCSessionDescription(signal));
+          await flushPendingIce();
           setStatus('connecting');
         }
       } catch (err) { console.error('Answer error:', err); }
@@ -83,7 +134,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     socket.on('call_ended', () => { cleanup(); onClose(); });
     socket.on('ice_candidate', async ({ candidate }) => {
       try {
-        if (peerRef.current) await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        await queueOrApplyIce(candidate);
       } catch (err) { console.error('ICE error:', err); }
     });
 
@@ -115,6 +166,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       const remoteStream = buildTrackStream(e, remoteStreamRef);
       void attachStream(remoteVideoRef.current, remoteStream);
       void attachStream(remoteAudioRef.current, remoteStream);
+      registerPlaybackUnlock();
     };
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState || 'new';
@@ -129,7 +181,15 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       } else if (state === 'disconnected') {
         setQuality('ضعيفة');
         setStatus('reconnecting');
+        if (!iceRestartedRef.current) {
+          iceRestartedRef.current = true;
+          setTimeout(() => { try { pc.restartIce?.(); } catch {} }, 1200);
+        }
       } else if (state === 'failed') {
+        if (!iceRestartedRef.current) {
+          iceRestartedRef.current = true;
+          try { pc.restartIce?.(); } catch {}
+        }
         setQuality('فشلت المحاولة');
         setPermissionError(prev => prev || (HAS_TURN_SERVER ? 'فشل الربط الصوتي/المرئي. يمكنك الرجوع إلى المحادثة ومتابعة الكتابة.' : 'فشل تأسيس الوسائط. الإعداد الحالي يستخدم STUN فقط، وهذا يفشل كثيرًا خارج نفس الشبكة. أضف TURN server في متغيرات الواجهة ثم أعد النشر.'));
         setStatus('error');
@@ -147,6 +207,10 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
         setConnectionState('checking');
         if (status !== 'incoming') setStatus('connecting');
       } else if (iceState === 'failed') {
+        if (!iceRestartedRef.current) {
+          iceRestartedRef.current = true;
+          try { pc.restartIce?.(); } catch {}
+        }
         setConnectionState('failed');
         setStatus('error');
         setQuality('فشلت المحاولة');
@@ -207,6 +271,7 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
       clearTimeout(unansweredTimerRef.current);
       const stream = await getMedia();
       const pc = buildPeer(stream);
+      iceRestartedRef.current = false;
       setStatus('connecting');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -228,8 +293,10 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     try {
       const stream = await getMedia();
       const pc = buildPeer(stream);
+      iceRestartedRef.current = false;
       setStatus('connecting');
       await pc.setRemoteDescription(new RTCSessionDescription(incomingSignal));
+      await flushPendingIce();
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('answer_call', { targetUserId: targetUser.id, signal: answer });
@@ -294,6 +361,13 @@ export default function CallModal({ socket, user, targetUser, callType, isIncomi
     remoteStreamRef.current = null;
     localStreamRef.current = null;
     peerRef.current = null;
+    pendingIceRef.current = [];
+    iceRestartedRef.current = false;
+    if (audioPlayUnlockRef.current) {
+      document.removeEventListener('click', audioPlayUnlockRef.current);
+      document.removeEventListener('touchstart', audioPlayUnlockRef.current);
+      audioPlayUnlockRef.current = null;
+    }
   };
 
   const formatTimer = (s) => {

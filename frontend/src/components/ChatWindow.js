@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Send, Phone, Video, Smile, Paperclip, Reply, Trash2, X, FileText, Play, Pause, Check, CheckCheck, Mic, ArrowRight, SmilePlus, Forward, Pin, Search as SearchIcon, Download, ChevronDown, Shield, VolumeX, ImageOff, MicOff, Ban, Tags, CheckSquare, Square, Copy, Pencil, Clock3, Image as ImageIcon, Film, Music2, Link2, Globe2, Inbox, ChevronLeft, ChevronRight, ExternalLink, Youtube, Instagram, Music4, FileBadge2, MonitorPlay, Clapperboard, Megaphone, BadgeCheck, Languages, Loader2 } from 'lucide-react';
+import {ArrowRight, BadgeCheck, Ban, Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Clock3, Copy, Download, ExternalLink, FileBadge2, FileText, Film, Forward, Globe2, Image as ImageIcon, ImageOff, Inbox, Instagram, Languages, Link2, Loader2, Megaphone, Mic, MicOff, MonitorPlay, Music2, Music4, Paperclip, Pause, Pencil, Phone, Pin, Play, Reply, Search as SearchIcon, Send, Shield, Smile, SmilePlus, Square, Tags, Trash2, Video, VolumeX, X, Youtube} from 'lucide-react';
 import { API_URL, buildAssetUrl } from '../api';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -950,12 +950,23 @@ ${result.translatedText}` : result.translatedText;
         <button className="icon-btn" onClick={() => fileInputRef.current?.click()} title="إرفاق ملف أو عدة ملفات أو اسحبها إلى نافذة المحادثة"><Paperclip size={20} /></button>
         <input ref={fileInputRef} type="file" hidden multiple onChange={handleFileUpload} />
         <div className="chat-input-wrap">
-          <textarea ref={textareaRef} value={editingMessageId ? editingText : msg} onChange={e => editingMessageId ? setEditingText(e.target.value) : handleTyping(e.target.value)} onKeyDown={handleKeyDown} placeholder={editingMessageId ? t('edit') : t('typeMessage')} rows={1} className="chat-input" />
+          {recorder.isRecording && !editingMessageId ? (
+            <div className="recorder-bar">
+              <span className="recorder-dot" />
+              <span className="recorder-time">{recorder.formatTime}</span>
+              <div className="recorder-wave">{Array.from({ length: 18 }).map((_, i) => <span key={i} className="recorder-wave-bar" style={{ height: `${10 + ((i % 5) * 4)}px`, animationDelay: `${i * 0.05}s` }} />)}</div>
+              <button type="button" className="icon-btn" onClick={recorder.paused ? recorder.resume : recorder.pause} title={recorder.paused ? 'استئناف' : 'إيقاف مؤقت'}>{recorder.paused ? <Mic size={18} /> : <Pause size={18} />}</button>
+              <button type="button" className="icon-btn" onClick={recorder.cancel} title="إلغاء"><X size={18} /></button>
+            </div>
+          ) : (
+            <textarea ref={textareaRef} value={editingMessageId ? editingText : msg} onChange={e => editingMessageId ? setEditingText(e.target.value) : handleTyping(e.target.value)} onKeyDown={handleKeyDown} placeholder={editingMessageId ? t('edit') : t('typeMessage')} rows={1} className="chat-input" />
+          )}
         </div>
         {!editingMessageId && <button className="icon-btn" onClick={() => setShowTranslatePanel(true)} title={t('language')}><Languages size={18} /></button>}
         {!editingMessageId && !!msg.trim() && <button className="icon-btn" onClick={() => setShowSchedule(true)} title={t('schedule')}><Clock3 size={18} /></button>}
-        {editingMessageId ? <button className="send-btn" onClick={saveEdit}><Check size={18} /></button> : (msg.trim() ? <button className="send-btn" onClick={sendMessage}><Send size={18} /></button> : <button className={`send-btn ${recorder.isRecording ? 'recording' : ''}`} onClick={recorder.isRecording ? recorder.stop : recorder.start}><Mic size={18} /></button>)}
+        {editingMessageId ? <button className="send-btn" onClick={saveEdit}><Check size={18} /></button> : (msg.trim() ? <button className="send-btn" onClick={sendMessage}><Send size={18} /></button> : <button className={`send-btn ${recorder.isRecording ? 'recording' : ''}`} onClick={recorder.isRecording ? recorder.stop : recorder.start} disabled={recorder.sending}>{recorder.sending ? <Loader2 size={18} className="spin" /> : <Mic size={18} />}</button>)}
       </div>
+      {!!recorder.error && <div className="composer-error-inline" onClick={recorder.clearError}>{recorder.error}</div>}
       </div>
 
       {showTranslatePanel && <TranslationPanel prefs={translatePrefs} setPrefs={setTranslatePrefs} onClose={() => setShowTranslatePanel(false)} onTranslateDraft={translateDraftNow} translatingDraft={translatingDraft} t={t} />}

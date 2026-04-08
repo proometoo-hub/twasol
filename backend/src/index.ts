@@ -39,7 +39,7 @@ import { getAllowedOrigins, isHttpsEnabled, isOriginAllowed } from './utils/conf
 
 dotenv.config();
 const app = express();
-const APP_VERSION = '6.48.1';
+const APP_VERSION = '6.48.3';
 const allowedOrigins = getAllowedOrigins();
 const useHttps = isHttpsEnabled();
 const allowPublicUploads = /^(1|true|yes)$/i.test(process.env.ALLOW_PUBLIC_UPLOADS || '');

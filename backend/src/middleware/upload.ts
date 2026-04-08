@@ -10,7 +10,7 @@ const allowedAvatarMime = new Set(['image/jpeg', 'image/png', 'image/webp', 'ima
 const allowedFileMime = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
   'video/mp4', 'video/webm', 'video/quicktime',
-  'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/webm', 'audio/ogg', 'audio/wav',
+  'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/webm', 'audio/ogg', 'audio/wav', 'audio/aac',
   'application/pdf', 'application/zip', 'application/x-zip-compressed', 'text/plain',
   'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -74,7 +74,14 @@ export async function validateUploadedFile(file?: Express.Multer.File, mode: 'av
     } else if (mime.includes('zip') || /\.(docx|xlsx|zip)$/i.test(ext)) {
       ok = startsWith(probe, [0x50, 0x4b, 0x03, 0x04]);
     } else if (mime.startsWith('audio/')) {
-      ok = probe.toString('ascii', 0, 4) === 'RIFF' || probe.toString('ascii', 0, 3) === 'ID3' || startsWith(probe, [0xff, 0xfb]) || startsWith(probe, [0x4f, 0x67, 0x67, 0x53]);
+      ok = probe.toString('ascii', 0, 4) === 'RIFF'
+        || probe.toString('ascii', 0, 3) === 'ID3'
+        || startsWith(probe, [0xff, 0xfb])
+        || startsWith(probe, [0xff, 0xf1])
+        || startsWith(probe, [0xff, 0xf9])
+        || startsWith(probe, [0x4f, 0x67, 0x67, 0x53])
+        || startsWith(probe, [0x1a, 0x45, 0xdf, 0xa3])
+        || probe.toString('ascii', 4, 8) === 'ftyp';
     } else if (mime.startsWith('video/')) {
       ok = probe.toString('ascii', 4, 8) === 'ftyp' || startsWith(probe, [0x1a, 0x45, 0xdf, 0xa3]);
     } else if (mime === 'text/plain') {

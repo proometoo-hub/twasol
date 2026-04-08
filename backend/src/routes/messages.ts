@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticateToken } from '../middleware/auth';
 import { requireConversationMember, requireMessageAccess } from '../utils/authz';
+import { checkSendPermission } from '../socket/permissionCheck';
 
 const router = Router();
 
@@ -59,6 +60,47 @@ router.get('/:conversationId/search', authenticateToken, async (req: any, res) =
     });
     res.json(msgs);
   } catch { res.status(500).json({ error: 'Error' }); }
+});
+
+
+router.post('/:conversationId', authenticateToken, async (req: any, res) => {
+  try {
+    const conversationId = parseInt(req.params.conversationId);
+    if (Number.isNaN(conversationId)) return res.status(400).json({ error: 'Invalid conversation' });
+    const { text, type, fileUrl, fileName, fileSize, replyToId, forwardedFrom, locationLat, locationLng, locationName, contactUserId, animation, encryptedKey } = req.body || {};
+    if ((!String(text || '').trim() && !fileUrl && !locationLat && !contactUserId) || !conversationId) return res.status(400).json({ error: 'Missing content' });
+    const perm = await checkSendPermission(prisma as any, req.userId, conversationId, type || 'text');
+    if (!perm.allowed) return res.status(403).json({ error: perm.reason || 'Access denied' });
+    const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
+    const expiresAt = conv?.disappearAfter ? new Date(Date.now() + conv.disappearAfter * 1000) : null;
+    const message = await prisma.message.create({
+      data: {
+        text: String(text || '').trim() || null,
+        senderId: req.userId,
+        conversationId,
+        type: type || (locationLat ? 'location' : contactUserId ? 'contact' : 'text'),
+        fileUrl,
+        fileName,
+        fileSize,
+        replyToId: replyToId || null,
+        forwardedFrom: forwardedFrom || null,
+        linkPreview: text ? (String(text).match(/https?:\/\/[^\s]+/) || [])[0] || null : null,
+        locationLat,
+        locationLng,
+        locationName,
+        contactUserId,
+        animation,
+        encryptedKey,
+        expiresAt,
+      },
+      include: msgInclude,
+    });
+    await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+    res.json(message);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error' });
+  }
 });
 
 router.get('/unread/counts', authenticateToken, async (req: any, res) => {

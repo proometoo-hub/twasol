@@ -2,6 +2,11 @@ function clean(value) {
   return String(value || '').trim();
 }
 
+function isPlaceholder(value) {
+  const raw = clean(value).toLowerCase();
+  return !raw || raw.includes('your_turn_host') || raw === 'username' || raw === 'credential' || raw.includes('example.com');
+}
+
 function normalizeUrls(raw) {
   const value = clean(raw);
   if (!value) return [];
@@ -29,13 +34,13 @@ function buildIceServers() {
   if (fromJson?.length) return fromJson;
 
   const stunUrls = normalizeUrls(process.env.REACT_APP_STUN_URL || 'stun:stun.l.google.com:19302');
-  const turnUrls = normalizeUrls(process.env.REACT_APP_TURN_URL || process.env.REACT_APP_TURN_URLS || '');
+  const turnUrls = normalizeUrls(process.env.REACT_APP_TURN_URL || process.env.REACT_APP_TURN_URLS || '').filter((url) => !isPlaceholder(url));
   const turnUsername = clean(process.env.REACT_APP_TURN_USERNAME);
   const turnCredential = clean(process.env.REACT_APP_TURN_CREDENTIAL);
 
   const servers = [];
   if (stunUrls.length) servers.push({ urls: stunUrls.length === 1 ? stunUrls[0] : stunUrls });
-  if (turnUrls.length) {
+  if (turnUrls.length && !isPlaceholder(turnUsername) && !isPlaceholder(turnCredential)) {
     servers.push({
       urls: turnUrls.length === 1 ? turnUrls[0] : turnUrls,
       username: turnUsername,
