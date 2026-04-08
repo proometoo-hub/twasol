@@ -1,9 +1,60 @@
+# Dependencies
 node_modules/
-dist/
-build/
+**/node_modules/
+
+# Env files
 .env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!**/.env.railway.example
+!**/.env.production.example
+!**/.env.vercel.example
+
+# Local certificates / keys
+certs/
+*.pem
+*.key
 *.key.pem
-dev.db*
+*.csr
+*.crt
+*.cer
+*.p12
+
+# Local databases / uploads / runtime data
+*.db
+*.sqlite
+*.sqlite3
+backend/prisma/*.db*
+backend/data/*.db*
 uploads/
+**/uploads/
+
+# Build outputs
+build/
+dist/
+coverage/
+.vercel/
+.next/
+.tmp/
+.tmp*/
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / OS
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Mobile local artifacts
+mobile-app/.expo/
+mobile-app/android/
+mobile-app/ios/

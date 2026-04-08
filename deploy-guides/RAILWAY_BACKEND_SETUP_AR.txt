@@ -1,0 +1,25 @@
+Railway Backend Setup
+=====================
+
+المستودع:
+https://github.com/proometoo-hub/twasol
+
+إعدادات الخدمة:
+- Root Directory = /backend
+- Build Command  = npm run build
+- Start Command  = npm run railway:start
+
+Variables:
+DATABASE_URL=${{ Postgres.DATABASE_URL }}
+JWT_SECRET=ضع_سلسلة_قوية_وطويلة_جداً
+PORT=4000
+BIND_HOST=0.0.0.0
+PUBLIC_APP_URL=https://twasol-production.up.railway.app
+ALLOWED_ORIGINS=https://twasol.vercel.app,https://*.vercel.app
+ALLOW_PUBLIC_UPLOADS=false
+HTTPS_ENABLED=false
+SERVE_FRONTEND_BUILD=false
+TRUST_PROXY_HOPS=1
+
+بعد النشر:
+- افتح /api/health للتأكد أن الخدمة تعمل.

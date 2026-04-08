@@ -1,0 +1,101 @@
+تجهيز النشر العالمي - الخطوات 2 إلى 5
+=====================================
+
+هذه الحزمة لا تحتوي تعديلات وظيفية على المشروع.
+الذي تم هنا هو تجهيز الرفع والنشر فقط.
+
+الخطوة 2: تجهيز هيكلة النشر
+---------------------------
+تم اعتماد الهيكلة التالية كما هي:
+- backend  -> للنشر على Railway
+- frontend -> للنشر على Vercel
+- mobile-app -> يبقى داخل المستودع فقط ولا يُنشر على Vercel/Railway
+
+الملفات المهمة للنشر:
+- .gitignore
+- backend/.env.railway.example
+- frontend/.env.vercel.example
+- frontend/vercel.json
+
+الخطوة 3: إعداد backend على Railway
+-----------------------------------
+في Railway أنشئ مشروعًا جديدًا ثم:
+1) أضف PostgreSQL
+2) أضف خدمة backend من GitHub
+3) اضبط:
+   Root Directory = /backend
+   Build Command  = npm run build
+   Start Command  = npm run railway:start
+
+Variables المقترحة في Railway:
+DATABASE_URL=${{ Postgres.DATABASE_URL }}
+JWT_SECRET=ضع_سلسلة_قوية_وطويلة_جداً
+PORT=4000
+BIND_HOST=0.0.0.0
+PUBLIC_APP_URL=https://twasol-production.up.railway.app
+ALLOWED_ORIGINS=https://twasol.vercel.app,https://*.vercel.app
+ALLOW_PUBLIC_UPLOADS=false
+HTTPS_ENABLED=false
+SERVE_FRONTEND_BUILD=false
+TRUST_PROXY_HOPS=1
+
+مهم:
+- لا تضع /api داخل PUBLIC_APP_URL
+- Root Directory يجب أن يبقى /backend
+
+الخطوة 4: إعداد frontend على Vercel
+------------------------------------
+في Vercel أنشئ مشروعًا جديدًا من نفس المستودع ثم اضبط:
+- Root Directory = frontend
+- Framework Preset = Create React App
+- Build Command = npm run build
+- Output Directory = build
+
+Environment Variables في Vercel:
+REACT_APP_API_URL=https://twasol-production.up.railway.app
+REACT_APP_SOCKET_URL=https://twasol-production.up.railway.app
+
+اختياري للمكالمات بين شبكات مختلفة:
+REACT_APP_TURN_URL=...
+REACT_APP_TURN_USERNAME=...
+REACT_APP_TURN_CREDENTIAL=...
+
+مهم جداً:
+- لا تضع /api في نهاية REACT_APP_API_URL
+- لا تضع قيم TURN وهمية
+
+الخطوة 5: أوامر GitHub النهائية
+--------------------------------
+من داخل مجلد المشروع نفّذ:
+
+git init
+git branch -M main
+git add .
+git commit -m "Prepare Twasol for global deploy"
+git remote remove origin
+git remote add origin https://github.com/proometoo-hub/twasol.git
+git push -u origin main --force
+
+إذا كان origin غير موجود أصلًا استخدم:
+
+git init
+git branch -M main
+git add .
+git commit -m "Prepare Twasol for global deploy"
+git remote add origin https://github.com/proometoo-hub/twasol.git
+git push -u origin main --force
+
+التحقق النهائي
+--------------
+1) بعد نشر Railway اختبر:
+   https://twasol-production.up.railway.app/api/health
+2) بعد نشر Vercel افتح:
+   https://twasol.vercel.app
+3) إذا ظهر خطأ CORS فتأكد أن ALLOWED_ORIGINS تحتوي رابط Vercel الصحيح.
+4) إذا ظهر /api/api فهذا يعني أن REACT_APP_API_URL وُضعت خطأ.
+
+ملاحظات مهمة
+-------------
+- هذه الحزمة جاهزة للرفع والنشر فقط.
+- الشهادات المحلية حُذفت من نسخة GitHub عمدًا.
+- النشر العالمي المقصود هنا: GitHub + Railway + Vercel.

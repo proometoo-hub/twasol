@@ -1,0 +1,25 @@
+أوامر رفع المشروع كاملًا إلى GitHub
+===================================
+
+الحالة العامة:
+المستودع الهدف هو:
+https://github.com/proometoo-hub/twasol.git
+
+الأوامر:
+
+git init
+git branch -M main
+git add .
+git commit -m "Prepare Twasol for global deploy"
+git remote remove origin
+git remote add origin https://github.com/proometoo-hub/twasol.git
+git push -u origin main --force
+
+إذا فشل سطر remove origin:
+
+git init
+git branch -M main
+git add .
+git commit -m "Prepare Twasol for global deploy"
+git remote add origin https://github.com/proometoo-hub/twasol.git
+git push -u origin main --force

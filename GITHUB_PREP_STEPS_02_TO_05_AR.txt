@@ -1,0 +1,12 @@
+تم إنجاز الخطوات 2 إلى 5 داخل مجلد:
+
+deploy-guides/
+
+ابدأ بهذا الملف أولًا:
+- deploy-guides/STEP_02_TO_05_MASTER_AR.txt
+
+ثم راجع عند الحاجة:
+- deploy-guides/RAILWAY_BACKEND_SETUP_AR.txt
+- deploy-guides/VERCEL_FRONTEND_SETUP_AR.txt
+- deploy-guides/GITHUB_PUSH_COMMANDS_AR.txt
+- deploy-guides/FINAL_DEPLOY_CHECKLIST_AR.txt

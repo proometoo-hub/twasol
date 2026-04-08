@@ -1,0 +1,24 @@
+Vercel Frontend Setup
+=====================
+
+المستودع:
+https://github.com/proometoo-hub/twasol
+
+إعدادات المشروع:
+- Root Directory = frontend
+- Framework Preset = Create React App
+- Build Command = npm run build
+- Output Directory = build
+
+Environment Variables:
+REACT_APP_API_URL=https://twasol-production.up.railway.app
+REACT_APP_SOCKET_URL=https://twasol-production.up.railway.app
+
+اختياري للمكالمات:
+REACT_APP_TURN_URL=ضع_قيمة_TURN_الحقيقية
+REACT_APP_TURN_USERNAME=ضع_اسم_المستخدم
+REACT_APP_TURN_CREDENTIAL=ضع_كلمة_المرور
+
+تنبيهات:
+- لا تضف /api في نهاية REACT_APP_API_URL
+- إذا استخدمت TURN فضع بيانات حقيقية فقط.
