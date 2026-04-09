@@ -1,0 +1,119 @@
+تجهيز Twasol للنشر على GitHub + Railway + Vercel
+================================================
+
+الخطة المعتمدة
+--------------
+- المستودع: https://github.com/proometoo-hub/twasol
+- الواجهة الأمامية: Vercel من مجلد client
+- الخادم الخلفي: Railway من مجلد server
+- قاعدة البيانات: PostgreSQL على Railway
+- التخزين الحالي للملفات: Railway Volume للخادم
+- الحساب الإداري الافتراضي:
+  - username: Admin
+  - password: 548519
+
+معلومة مهمة جدًا
+----------------
+رابط PostgreSQL الداخلي:
+postgresql://postgres:nAJzfFqjDdcXHVJEenixhHINAKDsvBaR@postgres.railway.internal:5432/railway
+
+هذا الرابط يعمل فقط من داخل Railway.
+لا تضعه في Vercel.
+ولا يعمل من جهازك المحلي إلا إذا كان هناك نفق أو ربط داخلي.
+
+الشيء الوحيد الذي سيبقى ناقصًا بعد رفع هذه النسخة
+--------------------------------------------------
+ستحتاج فقط إلى نسخ الدومين العام الذي يعطيك إياه Railway للخادم، ثم وضعه:
+1) في BASE_URL داخل Railway
+2) في client/.env.production أو Environment Variables في Vercel ضمن VITE_API_BASE
+
+الملفات المهمة التي أضيفت
+-------------------------
+- server/.env.railway.example
+- server/railway.json
+- server/nixpacks.toml
+- client/.env.vercel.example
+- client/vercel.json
+- server/src/scripts/migrate-sqlite-to-postgres.js
+
+رفع الواجهة على Vercel
+----------------------
+1) ادخل Vercel ثم New Project
+2) اختر المستودع proometoo-hub/twasol
+3) اجعل Root Directory = client
+4) Framework Preset = Vite
+5) Build Command = npm run build
+6) Output Directory = dist
+7) أضف Environment Variable:
+   VITE_API_BASE=https://YOUR-RAILWAY-PUBLIC-DOMAIN.up.railway.app
+8) انشر المشروع
+9) بعد النشر اربط الدومين:
+   https://twasol.vercel.app
+
+رفع الخادم على Railway
+----------------------
+1) ادخل Railway ثم New Project
+2) اختر Deploy from GitHub Repo
+3) اختر المستودع proometoo-hub/twasol
+4) اجعل Root Directory = server
+5) أضف خدمة PostgreSQL داخل نفس مشروع Railway
+6) أضف Volume للخدمة إذا كنت تريد استمرار الملفات القديمة والمحلية
+7) أضف المتغيرات التالية في Service Variables:
+
+NODE_ENV=production
+PORT=4000
+BASE_URL=https://YOUR-RAILWAY-PUBLIC-DOMAIN.up.railway.app
+CORS_ORIGINS=https://twasol.vercel.app
+JWT_SECRET=غيّرها إلى قيمة طويلة وعشوائية
+MEDIA_SECRET=غيّرها إلى قيمة ثانية مختلفة
+MAX_UPLOAD_MB=80
+MEDIA_LINK_TTL_SEC=86400
+TRUST_PROXY=1
+DATABASE_URL=postgresql://postgres:nAJzfFqjDdcXHVJEenixhHINAKDsvBaR@postgres.railway.internal:5432/railway
+ADMIN_USERNAME=Admin
+ADMIN_PASSWORD=548519
+ADMIN_DISPLAY_NAME=Admin
+
+ملاحظة مهمة عن PostgreSQL
+-------------------------
+الكود التشغيلي الحالي للمشروع ما زال يعتمد على SQLite كطبقة البيانات الأساسية.
+أضفت لك سكربت ترحيل من SQLite إلى PostgreSQL حتى تحفظ بياناتك وتجهز الهجرة خطوة بخطوة، لكنني لم أستبدل طبقة التشغيل كلها إلى PostgreSQL في هذه الحزمة لأن ذلك يحتاج إعادة كتابة أوسع لاستعلامات المشروع حتى لا تنكسر البيانات في النشر الأول.
+
+إذا أردت تشغيل النسخة بأكثر استقرار وأقل مخاطرة مباشرة، استخدم Railway Volume مع SQLite أولًا.
+وإذا أردت نقل البيانات الحالية إلى PostgreSQL من أجل الهجرة القادمة، شغّل:
+
+npm run migrate:sqlite:postgres
+
+من داخل مجلد server بعد ضبط DATABASE_URL.
+
+مكان قاعدة البيانات الحالية محليًا
+---------------------------------
+C:\twasol\server\data\tawasol.db
+
+نسخ احتياطي سريع على ويندوز:
+copy C:\twasol\server\data\tawasol.db C:\twasol\server\data\tawasol-backup.db
+
+أسرار عشوائية جاهزة للتبديل السريع
+----------------------------------
+يمكنك توليد أسرار جديدة بالأمر:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+ما الذي ترفعه إلى GitHub
+------------------------
+ارفع المشروع كاملًا كما هو.
+بعدها:
+- Vercel سيأخذ client فقط
+- Railway سيأخذ server فقط
+
+الخلاصة العملية
+---------------
+هذه الحزمة جهزت لك:
+- ملفات النشر
+- ملفات البيئة
+- إعدادات Vercel
+- إعدادات Railway
+- حساب مدير افتراضي
+- سكربت هجرة SQLite -> PostgreSQL
+
+والنقطة الوحيدة التي ستحتاجها بعد أول Deploy هي:
+- نسخ رابط Railway العام ووضعه بدل YOUR-RAILWAY-PUBLIC-DOMAIN

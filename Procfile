@@ -1,1 +1,1 @@
-web: npx prisma db push --accept-data-loss && node dist/index.js
+web: npm run start

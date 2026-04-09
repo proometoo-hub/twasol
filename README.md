@@ -1,54 +1,119 @@
-# Twasol Pro v6.48.3
+# Tawasol WhatsLike Ultimate
 
-تطبيق تواصل ومحادثة متكامل — صوت، فيديو، رسائل، مجموعات، قصص، والمزيد.
+نسخة مطورة محليًا لتقريب المشروع من تجربة تطبيق مراسلة احترافي، مع تحسينات واسعة على البنية، قاعدة البيانات، الأمان، الرسائل، المجموعات، القنوات، الحالات، وإدارة المكالمات الفردية.
 
-## Quick Start (Local)
+## التشغيل السريع على ويندوز
 
-```bash
-# 1. PostgreSQL
-docker run -d --name twasol-pg -p 5432:5432 -e POSTGRES_PASSWORD=twasol -e POSTGRES_DB=twasol postgres:16
+افتح نافذتين PowerShell.
 
-# 2. Generate JWT secret and put in backend/.env
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-
-# 3. Backend
-cd backend && npm install && npx prisma db push && npm run dev
-
-# 4. Frontend (new terminal)
-cd frontend && npm install && npm start
+### server
+```powershell
+cd C:\tawasol\server
+npm install
+npm run dev
 ```
 
-Open http://localhost:3020
-
-## Global Deployment (Railway + Vercel)
-
-See **DEPLOY_GLOBAL_GUIDE_AR.txt** for full guide, or run:
-
-```bash
-bash deploy-setup.sh
+### client
+```powershell
+cd C:\tawasol\client
+npm install
+npm run dev
 ```
 
-## Tech Stack
+ثم افتح:
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, Socket.IO Client, Axios |
-| Backend | Express, TypeScript, Socket.IO, Prisma |
-| Database | PostgreSQL |
-| Desktop | Electron |
-| Mobile | React Native (Expo) |
-| Calls | WebRTC (STUN/TURN) |
+```text
+http://localhost:5173
+```
 
-## Features
+## ملفات تشغيل سريعة
+- `start-server.bat`
+- `start-client.bat`
+- `start-dev.bat`
 
-- 💬 Real-time messaging (text, images, files, voice)
-- 📞 Voice & video calls (1:1 and group) via WebRTC
-- 👥 Groups & channels with admin controls
-- 📸 Stories (24h expiry)
-- 📊 Polls, scheduled messages, quick replies
-- 🔒 2FA, session management, ghost mode
-- 🌐 Multi-language (Arabic, English, +more)
-- 🤖 AI translation & transcription (optional)
-- 💰 Wallet system & commerce
-- 📱 Mobile app (Expo/React Native)
-- 🖥️ Desktop app (Electron)
+## الحساب التجريبي
+```text
+username: Admin
+password: 548519
+```
+
+## ما الذي أضيف في هذه النسخة
+- تقوية بنية الإعدادات والبيئة
+- تحسينات SQLite مع ترحيل تلقائي للنسخ القديمة
+- تحسينات أمان أساسية: CORS, Helmet, rate limit, validation
+- تحسينات الحسابات: تعديل الملف الشخصي، تغيير كلمة المرور، تفضيلات الخصوصية
+- تحسين الرسائل: تعديل، حذف منطقي، تمييز، إعادة توجيه، ردود، تحميل أقدم
+- تحسين المجموعات والقنوات: دعوة برمز، إدارة الأعضاء، ترقية الأدوار، إعدادات النشر
+- تحسين الحالات: مشاهدة، عداد مشاهدات، كتم/إلغاء كتم
+- سجل مكالمات فردية، حالات busy/reject/end، وتحسين signaling الأساسي
+- تحسينات للواجهة: بحث داخل المحادثة، كتم/أرشفة/تثبيت، تحسينات RTL والجوال
+- ملفات تشغيل على ويندوز و Docker للتشغيل المنظم
+
+## حدود النسخة الحالية
+هذه النسخة أقوى بكثير من السابقة، لكنها ليست بديلًا كاملاً لتطبيق إنتاجي ضخم مثل واتساب. ما يزال ينقصها في مرحلة لاحقة:
+- تشفير طرفي كامل E2EE
+- مزامنة متعددة الأجهزة
+- بنية مكالمات جماعية احترافية (SFU/TURN production-grade)
+- اختبارات آلية شاملة
+- PostgreSQL أو بنية تخزين إنتاجية عند التوسع الكبير
+
+## ملاحظات
+- إذا كانت لديك قاعدة قديمة أو ملف JSON من نسخة سابقة، فطبقة قاعدة البيانات تحاول ترحيلها تلقائيًا.
+- إذا ظهر خطأ بعد `npm install`، تأكد من إصدار Node. الموصى به 20.19+ أو 22+.
+
+
+## تجهيز المشروع للرفع على الإنترنت
+
+هذه النسخة مجهزة للنشر كخدمة ويب واحدة. في الإنتاج يتم بناء الواجهة `client` ثم يقوم السيرفر بتقديم ملفاتها الثابتة من `client/dist`.
+
+### ملفات النشر المضافة
+- `Dockerfile`
+- `docker-compose.yml`
+- `.dockerignore`
+- `railway.json`
+- `render.yaml`
+- `Procfile`
+- `.env.production.example`
+- `server/.env.production.example`
+- `client/.env.production.example`
+- `DEPLOY_ONLINE_AR.txt`
+
+### متغيرات البيئة الأساسية
+```env
+NODE_ENV=production
+PORT=4000
+BASE_URL=https://your-domain.example
+CORS_ORIGINS=https://your-domain.example
+JWT_SECRET=replace-with-a-long-random-secret
+MEDIA_SECRET=replace-with-another-long-random-secret
+MAX_UPLOAD_MB=80
+MEDIA_LINK_TTL_SEC=86400
+TRUST_PROXY=1
+```
+
+### تشغيل نسخة الإنتاج عبر Docker
+```bash
+cp .env.production.example .env.production
+# عدل القيم السرية والدومين
+
+docker compose up --build
+```
+
+ثم افتح:
+
+```text
+http://localhost:4000
+```
+
+### ملاحظات إنتاجية مهمة
+- احفظ هذه المجلدات بشكل دائم: `server/data` و`server/private_media` و`server/uploads`.
+- استخدم HTTPS في الإنترنت العام.
+- إذا كان التطبيق والسيرفر على نفس الدومين في الإنتاج، اترك `VITE_API_BASE` فارغًا.
+- في الإنتاج إذا لم تحدد `CORS_ORIGINS` فسيتم أخذ قيمة `BASE_URL` تلقائيًا.
+
+
+## نشر GitHub + Railway + Vercel
+راجع الملف:
+- `DEPLOY_GITHUB_RAILWAY_VERCEL_AR.txt`
+- `server/.env.railway.example`
+- `client/.env.vercel.example`

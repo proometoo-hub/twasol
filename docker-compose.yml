@@ -1,0 +1,16 @@
+services:
+  tawasol:
+    build: .
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      TRUST_PROXY: 1
+    volumes:
+      - ./server/data:/app/server/data
+      - ./server/private_media:/app/server/private_media
+      - ./server/uploads:/app/server/uploads
+    restart: unless-stopped

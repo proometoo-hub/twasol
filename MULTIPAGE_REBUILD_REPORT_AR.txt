@@ -1,0 +1,21 @@
+تمت إعادة تنظيم الواجهة إلى بنية متعددة الصفحات بدل الصفحة الواحدة المزدحمة.
+
+التحسينات:
+- صفحة رئيسية أخف وأكثر واقعية
+- صفحات مستقلة للمحادثات والمكالمات والمجموعات والاستكشاف والإعدادات
+- تنقل ثابت جانبي + تنقل سفلي للجوال
+- الاحتفاظ بمنطق المحادثات والمكالمات الحالي داخل طبقة موحدة
+- سهولة أعلى في مراجعة الأكواد وتعديل كل صفحة لاحقًا بشكل مستقل
+
+الملفات الجديدة الأساسية:
+- client/src/pages/sections/HomeDashboardPage.jsx
+- client/src/pages/sections/ChatsWorkspacePage.jsx
+- client/src/pages/sections/CallsWorkspacePage.jsx
+- client/src/pages/sections/GroupsWorkspacePage.jsx
+- client/src/pages/sections/DiscoverWorkspacePage.jsx
+- client/src/pages/sections/SettingsWorkspacePage.jsx
+
+الملفات المعدلة:
+- client/src/App.jsx
+- client/src/pages/AppPage.jsx
+- client/src/styles/app.css

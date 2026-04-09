@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.gitignore
+npm-debug.log*
+Dockerfile*
+docker-compose*.yml
+server/data
+server/private_media
+server/uploads
+client/dist
+*.zip

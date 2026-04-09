@@ -1,0 +1,21 @@
+تم في هذه المرحلة تطبيق تصميم فعلي داخل المشروع نفسه باتجاه Minimal Dark UI.
+
+أهم ما تغير:
+- شريط جانبي برموز فقط على الديسكتوب.
+- شريط سفلي بسيط على الجوال.
+- إزالة الهيدر العام فوق صفحة المحادثة عند فتح دردشة محددة.
+- جعل قائمة المحادثات صفحة مستقلة.
+- إبقاء صفحة الرسائل خفيفة: هيدر بسيط + الرسائل + مربع الكتابة فقط.
+- تقليل الزخرفة والبطاقات الثقيلة.
+- اعتماد خلفية سوداء وحدود خفيفة جدًا.
+- تبسيط صفحات: الرئيسية / المكالمات / المجموعات / الاستكشاف / الإعدادات.
+
+الملفات الأساسية المعدلة:
+- client/src/pages/AppPage.jsx
+- client/src/pages/sections/HomeDashboardPage.jsx
+- client/src/pages/sections/ChatsWorkspacePage.jsx
+- client/src/pages/sections/CallsWorkspacePage.jsx
+- client/src/pages/sections/GroupsWorkspacePage.jsx
+- client/src/pages/sections/DiscoverWorkspacePage.jsx
+- client/src/pages/sections/SettingsWorkspacePage.jsx
+- client/src/styles/app.css

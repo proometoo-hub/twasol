@@ -1,9 +1,7 @@
-node_modules/
-dist/
-build/
-.env
-*.key.pem
-dev.db*
-uploads/
-*.log
+node_modules
+client/dist
+server/data
+server/uploads/*
+!server/uploads/.gitkeep
 .DS_Store
+.env

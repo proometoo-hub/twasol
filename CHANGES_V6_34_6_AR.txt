@@ -1,7 +1,0 @@
-v6.34.6
-- إصلاح أخطاء تجميع الواجهة الناتجة عن أيقونات غير مدعومة في lucide-react
-- استبدال UsersRound -> Users
-- استبدال UserRound -> Users
-- استبدال MessageSquareMore -> MessageSquare
-- استبدال PanelsTopLeft -> LayoutGrid
-- استبدال AudioLines -> Activity

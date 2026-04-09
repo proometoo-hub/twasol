@@ -1,0 +1,41 @@
+تجهيز المشروع للرفع على الإنترنت
+=================================
+
+تم تجهيز المشروع ليعمل كخدمة ويب واحدة:
+- السيرفر Express يخدم API
+- وفي الإنتاج يخدم أيضًا client/dist مباشرة
+- يوجد Dockerfile جاهز
+- يوجد docker-compose.yml جاهز
+- يوجد railway.json جاهز
+- يوجد render.yaml جاهز
+- يوجد Procfile جاهز
+- توجد ملفات env للإنتاج
+
+المتغيرات المطلوبة للإنتاج:
+- NODE_ENV=production
+- PORT=4000
+- BASE_URL=https://your-domain.example
+- CORS_ORIGINS=https://your-domain.example
+- JWT_SECRET=سلسلة طويلة وعشوائية
+- MEDIA_SECRET=سلسلة طويلة وعشوائية مختلفة
+- MAX_UPLOAD_MB=80
+- MEDIA_LINK_TTL_SEC=86400
+- TRUST_PROXY=1
+
+ملاحظات مهمة:
+1) عند الرفع على الإنترنت استخدم دومين HTTPS.
+2) إذا استخدمت منصة تدعم Docker، فالمشروع جاهز مباشرة بملف Dockerfile.
+3) احرص على حفظ هذه المجلدات بشكل دائم:
+   - server/data
+   - server/private_media
+   - server/uploads
+4) لا تترك JWT_SECRET أو MEDIA_SECRET بالقيم الافتراضية.
+5) إذا استخدمت دومين واحد للتطبيق كله، اترك VITE_API_BASE فارغًا.
+
+أوامر محلية سريعة لاختبار نسخة الإنتاج:
+1) انسخ .env.production.example إلى .env.production
+2) عدل القيم السرية والدومين
+3) نفذ:
+   docker compose up --build
+4) افتح:
+   http://localhost:4000
