@@ -35,11 +35,18 @@ initSocket(server);
 
 app.use(cors({
   origin(origin, cb) {
-    if (!origin || !config.corsOrigins.length || config.corsOrigins.includes(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);
+
+    const allowed = !config.corsOrigins.length || config.corsOrigins.includes(origin);
+    const isVercelPreview = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin);
+
+    if (allowed || isVercelPreview) return cb(null, true);
+
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
 }));
+
 app.use(basicSecurityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -48,7 +55,16 @@ app.use(rateLimit({ windowMs: 60_000, max: 240, keyPrefix: 'global' }));
 app.use('/api/auth', rateLimit({ windowMs: 60_000, max: 25, keyPrefix: 'auth' }));
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'tawasol-server', time: new Date().toISOString(), recommendations: { transport: 'Socket.IO', upload: `${config.maxUploadMb}MB`, stunServers: config.defaultStunServers } });
+  res.json({
+    ok: true,
+    service: 'tawasol-server',
+    time: new Date().toISOString(),
+    recommendations: {
+      transport: 'Socket.IO',
+      upload: `${config.maxUploadMb}MB`,
+      stunServers: config.defaultStunServers,
+    },
+  });
 });
 
 app.use('/api/auth', authRoutes);
@@ -59,8 +75,14 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/media', mediaRoutes);
 
 app.use((err, _req, res, _next) => {
-  if (err?.message === 'Unsupported file type') return res.status(400).json({ error: err.message });
-  if (err?.message === 'Not allowed by CORS') return res.status(403).json({ error: err.message });
+  if (err?.message === 'Unsupported file type') {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (err?.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: err.message });
+  }
+
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
