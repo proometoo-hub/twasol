@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import './db/index.js';
-import { config, matchesAllowedOrigin } from './config.js';
+import { config } from './config.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import conversationRoutes from './routes/conversations.js';
@@ -33,19 +33,20 @@ process.on('uncaughtException', (error) => {
 
 initSocket(server);
 
-const corsOptions = {
+app.use(cors({
   origin(origin, cb) {
-    if (matchesAllowedOrigin(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);
+
+    const allowed = !config.corsOrigins.length || config.corsOrigins.includes(origin);
+    const isVercelPreview = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin);
+
+    if (allowed || isVercelPreview) return cb(null, true);
+
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 204,
-};
+}));
 
-app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
 app.use(basicSecurityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -79,7 +80,7 @@ app.use((err, _req, res, _next) => {
   }
 
   if (err?.message === 'Not allowed by CORS') {
-    return res.status(403).json({ error: err.message, origin: _req.headers.origin || null, allowed: config.corsOrigins });
+    return res.status(403).json({ error: err.message });
   }
 
   console.error(err);
@@ -94,6 +95,6 @@ if (fs.existsSync(clientDist)) {
   });
 }
 
-server.listen(config.port, config.bindHost || undefined, () => {
+server.listen(config.port, () => {
   console.log(`Tawasol server running on http://localhost:${config.port}`);
 });

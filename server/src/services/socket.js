@@ -1,6 +1,5 @@
 import { Server } from 'socket.io';
 import db from '../db/index.js';
-import { config, matchesAllowedOrigin } from '../config.js';
 import { verifyToken } from '../utils/auth.js';
 import { nowIso } from '../utils/helpers.js';
 
@@ -37,16 +36,7 @@ const updateCallStatus = async (callId, status, endedBy = null) => {
 };
 
 export const initSocket = (httpServer) => {
-  io = new Server(httpServer, {
-    cors: {
-      origin(origin, cb) {
-        if (matchesAllowedOrigin(origin)) return cb(null, true);
-        return cb(new Error('Not allowed by CORS'));
-      },
-      methods: ['GET', 'POST'],
-      credentials: true,
-    },
-  });
+  io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
   io.use(async (socket, next) => {
     try {
