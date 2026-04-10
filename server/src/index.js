@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import './db/index.js';
-import { config, isAllowedOrigin } from './config.js';
+import { config, isOriginAllowed } from './config.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import conversationRoutes from './routes/conversations.js';
@@ -35,12 +35,12 @@ initSocket(server);
 
 const corsOptions = {
   origin(origin, cb) {
-    if (isAllowedOrigin(origin)) return cb(null, true);
+    if (isOriginAllowed(origin)) return cb(null, true);
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 204,
 };
 
@@ -58,11 +58,11 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     service: 'tawasol-server',
     time: new Date().toISOString(),
-    corsOrigins: config.corsOrigins,
     recommendations: {
       transport: 'Socket.IO',
       upload: `${config.maxUploadMb}MB`,
       stunServers: config.defaultStunServers,
+      corsOrigins: config.corsOrigins,
     },
   });
 });
@@ -74,15 +74,9 @@ app.use('/api/statuses', statusRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/media', mediaRoutes);
 
-app.use((err, req, res, _next) => {
+app.use((err, _req, res, _next) => {
   if (err?.message === 'Unsupported file type') return res.status(400).json({ error: err.message });
-  if (err?.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      error: err.message,
-      origin: req.headers.origin || '',
-      allowedOrigins: config.corsOrigins,
-    });
-  }
+  if (err?.message === 'Not allowed by CORS') return res.status(403).json({ error: err.message, allowedOrigins: config.corsOrigins });
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
@@ -95,6 +89,6 @@ if (fs.existsSync(clientDist)) {
   });
 }
 
-server.listen(config.port, '0.0.0.0', () => {
-  console.log(`Twasol server running on port ${config.port}`);
+server.listen(config.port, () => {
+  console.log(`Tawasol server running on http://localhost:${config.port}`);
 });
