@@ -1,0 +1,28 @@
+نسخة هذه الحزمة مجهزة للنشر كخدمة واحدة على Railway فقط.
+
+الفكرة:
+- Railway يبني الواجهة من مجلد client
+- السيرفر من مجلد server يخدم الواجهة نفسها من نفس الدومين
+- لا تحتاج Vercel
+- لا تحتاج CORS أو VITE_API_BASE في الإنتاج
+
+المطلوب على Railway:
+1) أنشئ خدمة جديدة من نفس المستودع أو ارفع هذه الحزمة.
+2) اجعل Root Directory هو جذر المشروع.
+3) Railway سيقرأ Dockerfile من الجذر و railway.json من الجذر.
+4) أضف Volume واحدًا للخدمة نفسها، واجعل Mount Path:
+   /app/storage
+5) أضف Variables من الملف .env.production.example بعد تغيير:
+   - BASE_URL
+   - PUBLIC_APP_URL
+   - JWT_SECRET
+   - MEDIA_SECRET
+6) افتح الدومين العام من Railway نفسه فقط.
+
+ملاحظات مهمة:
+- اترك VITE_API_BASE فارغًا في الإنتاج.
+- STORAGE_ROOT مضبوط إلى /app/storage ليتوافق مع Volume.
+- البيانات ستخزن داخل:
+  /app/storage/data
+  /app/storage/private_media
+  /app/storage/uploads

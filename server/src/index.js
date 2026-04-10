@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import './db/index.js';
-import { config } from './config.js';
+import { config, isAllowedOrigin } from './config.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import conversationRoutes from './routes/conversations.js';
@@ -16,14 +16,13 @@ import mediaRoutes from './routes/media.js';
 import { initSocket } from './services/socket.js';
 import { basicSecurityHeaders } from './middleware/security.js';
 import { rateLimit } from './middleware/rateLimit.js';
-import { isAllowedOrigin } from './utils/origins.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
-if (config.trustProxy) app.set('trust proxy', 1);
+if (config.trustProxy) app.set('trust proxy', config.trustProxyHops || 1);
 
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled promise rejection:', reason);
@@ -36,12 +35,10 @@ initSocket(server);
 
 const corsOptions = {
   origin(origin, cb) {
-    if (isAllowedOrigin(origin, config.corsOrigins)) return cb(null, true);
+    if (isAllowedOrigin(origin)) return cb(null, true);
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(cors(corsOptions));
@@ -62,6 +59,7 @@ app.get('/api/health', (_req, res) => {
       transport: 'Socket.IO',
       upload: `${config.maxUploadMb}MB`,
       stunServers: config.defaultStunServers,
+      deployment: 'railway-single-service',
     },
   });
 });
@@ -83,11 +81,11 @@ app.use((err, _req, res, _next) => {
 const clientDist = path.resolve(__dirname, '../../client/dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
-  app.get(/^(?!\/api|\/socket\.io|\/uploads).*/, (_req, res) => {
+  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
 
 server.listen(config.port, config.bindHost, () => {
-  console.log(`Tawasol server running on http://${config.bindHost}:${config.port}`);
+  console.log(`Twasol Railway app running on http://${config.bindHost}:${config.port}`);
 });

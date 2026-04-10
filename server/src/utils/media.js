@@ -5,7 +5,7 @@ import db from '../db/index.js';
 import { config } from '../config.js';
 import { createId, nowIso } from './helpers.js';
 
-const mediaRoot = path.resolve(config.rootDir, 'private_media');
+const mediaRoot = path.resolve(config.storageRoot, 'private_media');
 fs.mkdirSync(mediaRoot, { recursive: true });
 const key = crypto.createHash('sha256').update(String(config.mediaSecret || config.jwtSecret)).digest();
 

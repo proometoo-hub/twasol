@@ -1,0 +1,25 @@
+هذه النسخة مجهزة للعمل على Railway فقط كخدمة واحدة من نفس الدومين.
+
+المهم:
+- لا تستخدم Vercel مع هذه النسخة.
+- انشر من جذر المشروع نفسه.
+- Railway سيقرأ Dockerfile و railway.json من الجذر.
+
+الخطوات:
+1) أنشئ خدمة جديدة على Railway من المستودع أو من هذه الحزمة.
+2) اجعل Root Directory فارغًا أو / (أي جذر المشروع).
+3) فعّل Public Domain للخدمة.
+4) أضف Volume واحدًا للخدمة.
+5) اجعل Mount Path للـ Volume:
+   /app/storage
+6) انسخ القيم من .env.production.example إلى Variables في Railway بعد تعديل:
+   - BASE_URL
+   - PUBLIC_APP_URL
+   - JWT_SECRET
+   - MEDIA_SECRET
+7) اعمل Deploy ثم افتح نفس رابط Railway العام.
+
+ملاحظات:
+- لا تضع VITE_API_BASE في هذه النسخة.
+- نفس رابط Railway يخدم الواجهة والـ API وSocket.IO.
+- البيانات والوسائط تحفظ داخل Volume عبر STORAGE_ROOT=/app/storage.

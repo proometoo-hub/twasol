@@ -2,8 +2,7 @@ import { Server } from 'socket.io';
 import db from '../db/index.js';
 import { verifyToken } from '../utils/auth.js';
 import { nowIso } from '../utils/helpers.js';
-import { config } from '../config.js';
-import { isAllowedOrigin } from '../utils/origins.js';
+import { isAllowedOrigin } from '../config.js';
 
 let io;
 const activeSockets = new Map();
@@ -41,12 +40,13 @@ export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
       origin(origin, cb) {
-        if (isAllowedOrigin(origin, config.corsOrigins)) return cb(null, true);
+        if (isAllowedOrigin(origin)) return cb(null, true);
         return cb(new Error('Not allowed by CORS'));
       },
       methods: ['GET', 'POST'],
       credentials: true,
     },
+    path: '/socket.io',
   });
 
   io.use((socket, next) => {

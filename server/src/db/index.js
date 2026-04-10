@@ -8,7 +8,7 @@ import { createId, nowIso } from '../utils/helpers.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '../../');
-const dataDir = path.join(root, 'data');
+const dataDir = path.join(process.env.STORAGE_ROOT ? path.resolve(process.env.STORAGE_ROOT) : root, 'data');
 const dbFile = path.join(dataDir, 'tawasol.db');
 const legacyJsonFile = path.join(dataDir, 'tawasol.json');
 fs.mkdirSync(dataDir, { recursive: true });

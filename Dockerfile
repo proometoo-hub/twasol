@@ -11,6 +11,11 @@ RUN npm run build -w client
 
 ENV NODE_ENV=production
 ENV PORT=4000
+ENV BIND_HOST=0.0.0.0
+ENV STORAGE_ROOT=/app/storage
+
+RUN mkdir -p /app/storage/data /app/storage/private_media /app/storage/uploads
+
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
