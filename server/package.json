@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "migrate:sqlite:postgres": "node src/scripts/migrate-sqlite-to-postgres.js"
+    "migrate:sqlite:postgres": "node src/scripts/migrate-sqlite-to-postgres.js",
+    "build": "node -e \"console.log('No server build step required')\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
