@@ -1,23 +1,35 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildAllowedOrigins } from './utils/origins.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const toList = (value = '') => value.split(',').map((item) => item.trim()).filter(Boolean);
+const configuredOrigins = buildAllowedOrigins(
+  process.env.CORS_ORIGINS || '',
+  process.env.ALLOWED_ORIGINS || '',
+  process.env.BASE_URL || '',
+  process.env.PUBLIC_APP_URL || '',
+);
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
   isProd: process.env.NODE_ENV === 'production',
   rootDir,
   port: Number(process.env.PORT || 4000),
+  bindHost: process.env.BIND_HOST || '0.0.0.0',
   jwtSecret: process.env.JWT_SECRET || 'tawasol-dev-secret-change-me',
-  corsOrigins: toList(process.env.CORS_ORIGINS || process.env.BASE_URL || ''),
-  trustProxy: String(process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '0')) === '1',
+  corsOrigins: configuredOrigins,
+  trustProxy:
+    String(
+      process.env.TRUST_PROXY ||
+      process.env.TRUST_PROXY_HOPS ||
+      (process.env.NODE_ENV === 'production' ? '1' : '0'),
+    ) === '1',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 80),
   appName: 'Tawasol',
-  baseUrl: process.env.BASE_URL || '',
+  baseUrl: process.env.BASE_URL || process.env.PUBLIC_APP_URL || '',
   defaultStunServers: [
     'stun:stun.l.google.com:19302',
     'stun:stun1.l.google.com:19302',

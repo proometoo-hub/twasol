@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const PROD_PROXY_BASE = '';
+const API_BASE = import.meta.env.PROD ? PROD_PROXY_BASE : (import.meta.env.VITE_API_BASE || '');
 
 const parse = async (response) => {
   const data = await response.json().catch(() => ({}));

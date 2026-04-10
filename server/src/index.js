@@ -16,6 +16,7 @@ import mediaRoutes from './routes/media.js';
 import { initSocket } from './services/socket.js';
 import { basicSecurityHeaders } from './middleware/security.js';
 import { rateLimit } from './middleware/rateLimit.js';
+import { isAllowedOrigin } from './utils/origins.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,20 +34,18 @@ process.on('uncaughtException', (error) => {
 
 initSocket(server);
 
-app.use(cors({
+const corsOptions = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true);
-
-    const allowed = !config.corsOrigins.length || config.corsOrigins.includes(origin);
-    const isVercelPreview = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin);
-
-    if (allowed || isVercelPreview) return cb(null, true);
-
+    if (isAllowedOrigin(origin, config.corsOrigins)) return cb(null, true);
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
 
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(basicSecurityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -75,14 +74,8 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/media', mediaRoutes);
 
 app.use((err, _req, res, _next) => {
-  if (err?.message === 'Unsupported file type') {
-    return res.status(400).json({ error: err.message });
-  }
-
-  if (err?.message === 'Not allowed by CORS') {
-    return res.status(403).json({ error: err.message });
-  }
-
+  if (err?.message === 'Unsupported file type') return res.status(400).json({ error: err.message });
+  if (err?.message === 'Not allowed by CORS') return res.status(403).json({ error: err.message });
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
@@ -95,6 +88,6 @@ if (fs.existsSync(clientDist)) {
   });
 }
 
-server.listen(config.port, () => {
-  console.log(`Tawasol server running on http://localhost:${config.port}`);
+server.listen(config.port, config.bindHost, () => {
+  console.log(`Tawasol server running on http://${config.bindHost}:${config.port}`);
 });

@@ -9,7 +9,7 @@
       "destination": "https://twasol-production.up.railway.app/socket.io/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|socket\.io/).*)",
       "destination": "/index.html"
     }
   ]

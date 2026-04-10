@@ -6,11 +6,10 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "build": "prisma generate --schema=./prisma/schema.prisma",
+    "build": "node -e \"console.log('server build ok')\"",
     "migrate:sqlite:postgres": "node src/scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {
-    "@prisma/client": "5.22.0",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",
@@ -19,7 +18,6 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
     "pg": "^8.13.1",
-    "prisma": "5.22.0",
     "socket.io": "^4.8.1"
   }
 }
