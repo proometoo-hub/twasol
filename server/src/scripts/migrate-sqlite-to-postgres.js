@@ -46,39 +46,25 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
-  title TEXT NOT NULL DEFAULT '',
-  description TEXT NOT NULL DEFAULT '',
-  avatar_url TEXT,
-  created_by TEXT,
-  invite_code TEXT UNIQUE,
-  settings_json TEXT NOT NULL DEFAULT '{}',
+  title TEXT,
+  description TEXT,
+  invite_code TEXT,
+  invite_enabled INTEGER NOT NULL DEFAULT 0,
+  allow_member_messages INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS conversation_members (
-  id TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'member',
-  joined_at TEXT NOT NULL,
   archived INTEGER NOT NULL DEFAULT 0,
   pinned INTEGER NOT NULL DEFAULT 0,
   muted_until TEXT,
   last_read_at TEXT,
-  UNIQUE (conversation_id, user_id)
-);
-
-CREATE TABLE IF NOT EXISTS media_files (
-  id TEXT PRIMARY KEY,
-  owner_user_id TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'generic',
-  storage_name TEXT NOT NULL UNIQUE,
-  original_name TEXT,
-  mime_type TEXT NOT NULL,
-  size_bytes BIGINT NOT NULL,
-  iv_b64 TEXT NOT NULL,
-  tag_b64 TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  joined_at TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -89,24 +75,15 @@ CREATE TABLE IF NOT EXISTS messages (
   text TEXT NOT NULL DEFAULT '',
   media_url TEXT,
   media_name TEXT,
-  media_size BIGINT,
+  media_size INTEGER,
+  media_mime TEXT,
+  media_id TEXT,
   reply_to_id TEXT,
   forwarded_from_id TEXT,
+  meta TEXT,
   edited_at TEXT,
   deleted_at TEXT,
-  meta_json TEXT NOT NULL DEFAULT '{}',
-  media_id TEXT,
-  media_mime TEXT,
   created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS reactions (
-  id TEXT PRIMARY KEY,
-  message_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  emoji TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE (message_id, user_id, emoji)
 );
 
 CREATE TABLE IF NOT EXISTS message_reads (
@@ -116,22 +93,31 @@ CREATE TABLE IF NOT EXISTS message_reads (
   PRIMARY KEY (message_id, user_id)
 );
 
-CREATE TABLE IF NOT EXISTS starred_messages (
-  user_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS message_reactions (
   message_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  PRIMARY KEY (user_id, message_id)
+  PRIMARY KEY (message_id, user_id, emoji)
+);
+
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id TEXT NOT NULL,
+  blocked_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id)
 );
 
 CREATE TABLE IF NOT EXISTS statuses (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'text',
-  text TEXT NOT NULL DEFAULT '',
+  text TEXT,
   media_url TEXT,
-  media_id TEXT,
   media_mime TEXT,
-  style_json TEXT NOT NULL DEFAULT '{}',
+  media_id TEXT,
+  background TEXT,
+  style_json TEXT,
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -150,62 +136,68 @@ CREATE TABLE IF NOT EXISTS status_mutes (
   PRIMARY KEY (user_id, muted_user_id)
 );
 
-CREATE TABLE IF NOT EXISTS blocks (
-  blocker_id TEXT NOT NULL,
-  blocked_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (blocker_id, blocked_id)
+CREATE TABLE IF NOT EXISTS media_files (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL,
+  conversation_id TEXT,
+  status_id TEXT,
+  kind TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  original_name TEXT,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  iv_hex TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS calls (
   id TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL,
-  creator_id TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'video',
-  status TEXT NOT NULL DEFAULT 'ringing',
-  answered_at TEXT,
-  ended_by TEXT,
+  initiator_id TEXT NOT NULL,
+  target_user_id TEXT,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
   ended_at TEXT,
-  updated_at TEXT,
-  created_at TEXT NOT NULL
+  duration_sec INTEGER
 );
 `;
 
-const tableColumns = (table) => sqlite.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name);
-
-const insertRows = async (table, rows) => {
-  if (!rows.length) return;
-  const columns = Object.keys(rows[0]);
-  const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-  const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`;
-  for (const row of rows) {
-    await pg.query(sql, columns.map((col) => row[col]));
-  }
-  console.log(`Migrated ${rows.length} rows from ${table}`);
+const placeholders = (row) => Object.keys(row).map((_, i) => `$${i + 1}`).join(', ');
+const insertRow = async (table, row) => {
+  const keys = Object.keys(row);
+  const sql = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders(row)}) ON CONFLICT DO NOTHING`;
+  await pg.query(sql, Object.values(row));
 };
 
-const copyTable = async (sqliteTable, pgTable = sqliteTable, mapRow = (row) => row) => {
-  const rows = sqlite.prepare(`SELECT * FROM ${sqliteTable}`).all().map(mapRow);
-  await insertRows(pgTable, rows);
+const copyTable = async (table) => {
+  const rows = sqlite.prepare(`SELECT * FROM ${table}`).all();
+  for (const row of rows) await insertRow(table, row);
+  console.log(`Migrated ${rows.length} rows from ${table}`);
 };
 
 const main = async () => {
   await pg.connect();
   await pg.query(createSchemaSql);
 
-  await copyTable('users');
-  await copyTable('conversations');
-  await copyTable('conversation_members');
-  await copyTable('media_files');
-  await copyTable('messages', 'messages', (row) => ({ ...row, meta_json: row.meta_json || row.meta || '{}' }));
-  await copyTable('reactions');
-  await copyTable('message_reads');
-  if (tableColumns('starred_messages').length) await copyTable('starred_messages');
-  await copyTable('statuses', 'statuses', (row) => ({ ...row, style_json: row.style_json || '{}' }));
-  await copyTable('status_views');
-  await copyTable('status_mutes');
-  await copyTable('blocks');
-  await copyTable('calls');
+  const tables = [
+    'users',
+    'conversations',
+    'conversation_members',
+    'messages',
+    'message_reads',
+    'message_reactions',
+    'blocks',
+    'statuses',
+    'status_views',
+    'status_mutes',
+    'media_files',
+    'calls',
+  ];
+
+  for (const table of tables) {
+    await copyTable(table);
+  }
 
   await pg.end();
   sqlite.close();

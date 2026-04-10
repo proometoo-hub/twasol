@@ -6,6 +6,24 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
 const toList = (value = '') => value.split(',').map((item) => item.trim()).filter(Boolean);
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wildcardToRegExp = (pattern = '') => new RegExp(`^${escapeRegex(pattern).replace(/\\\*/g, '.*')}$`);
+
+const rawCorsOrigins = toList(process.env.CORS_ORIGINS || process.env.BASE_URL || '');
+const corsOriginPatterns = rawCorsOrigins.map((item) => ({
+  value: item,
+  regex: item.includes('*') ? wildcardToRegExp(item) : null,
+}));
+
+export const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  return corsOriginPatterns.some(({ value, regex }) => {
+    if (value === origin) return true;
+    if (regex?.test(origin)) return true;
+    return false;
+  });
+};
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
@@ -13,10 +31,10 @@ export const config = {
   rootDir,
   port: Number(process.env.PORT || 4000),
   jwtSecret: process.env.JWT_SECRET || 'tawasol-dev-secret-change-me',
-  corsOrigins: toList(process.env.CORS_ORIGINS || process.env.BASE_URL || ''),
+  corsOrigins: rawCorsOrigins,
   trustProxy: String(process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '0')) === '1',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 80),
-  appName: 'Tawasol',
+  appName: 'Twasol',
   baseUrl: process.env.BASE_URL || '',
   defaultStunServers: [
     'stun:stun.l.google.com:19302',

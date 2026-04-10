@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import './db/index.js';
-import { config } from './config.js';
+import { config, isAllowedOrigin } from './config.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import conversationRoutes from './routes/conversations.js';
@@ -33,20 +33,19 @@ process.on('uncaughtException', (error) => {
 
 initSocket(server);
 
-app.use(cors({
+const corsOptions = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true);
-
-    const allowed = !config.corsOrigins.length || config.corsOrigins.includes(origin);
-    const isVercelPreview = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin);
-
-    if (allowed || isVercelPreview) return cb(null, true);
-
+    if (isAllowedOrigin(origin)) return cb(null, true);
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With'],
+  optionsSuccessStatus: 204,
+};
 
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(basicSecurityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -59,6 +58,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     service: 'tawasol-server',
     time: new Date().toISOString(),
+    corsOrigins: config.corsOrigins,
     recommendations: {
       transport: 'Socket.IO',
       upload: `${config.maxUploadMb}MB`,
@@ -74,15 +74,15 @@ app.use('/api/statuses', statusRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/media', mediaRoutes);
 
-app.use((err, _req, res, _next) => {
-  if (err?.message === 'Unsupported file type') {
-    return res.status(400).json({ error: err.message });
-  }
-
+app.use((err, req, res, _next) => {
+  if (err?.message === 'Unsupported file type') return res.status(400).json({ error: err.message });
   if (err?.message === 'Not allowed by CORS') {
-    return res.status(403).json({ error: err.message });
+    return res.status(403).json({
+      error: err.message,
+      origin: req.headers.origin || '',
+      allowedOrigins: config.corsOrigins,
+    });
   }
-
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
@@ -95,6 +95,6 @@ if (fs.existsSync(clientDist)) {
   });
 }
 
-server.listen(config.port, () => {
-  console.log(`Tawasol server running on http://localhost:${config.port}`);
+server.listen(config.port, '0.0.0.0', () => {
+  console.log(`Twasol server running on port ${config.port}`);
 });

@@ -1,0 +1,24 @@
+تم في هذه النسخة إصلاح ملفات الربط والنشر والتركيز على CORS والتوافق بين Vercel وRailway:
+
+1) دعم CORS صار يقبل:
+- https://twasol.vercel.app
+- أي Preview من Vercel مثل https://anything.vercel.app
+- أي أصل مطابق لما تضعه في CORS_ORIGINS مع دعم wildcard مثل https://*.vercel.app
+
+2) تم إصلاح Socket.IO ليستخدم نفس منطق السماح للأصول بدل origin='*'.
+
+3) تم تجهيز ملفات Railway داخل مجلد server نفسه:
+- server/railway.json
+- server/nixpacks.toml
+- server/package.json (أضيف له build no-op حتى لا يفشل لو استدعته المنصة)
+
+4) تم تحديث ملفات env examples لتشير إلى الرابط الحقيقي للسيرفر:
+- https://twasol-production.up.railway.app
+
+5) تم إزالة الاعتماد على Placeholder غير دقيقة في ملفات الربط، مع إبقاء الأسرار كقيم تستبدلها أنت من لوحة المنصة.
+
+ما يزال عليك بعد رفع هذه النسخة:
+- على Railway: ضبط Variables الفعلية مثل JWT_SECRET و MEDIA_SECRET و CORS_ORIGINS
+- على Vercel: ضبط VITE_API_BASE إلى https://twasol-production.up.railway.app
+- التأكد أن Root Directory على Railway = server
+- والتأكد أن Root Directory على Vercel = client
