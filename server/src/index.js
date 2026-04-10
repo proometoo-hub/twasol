@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import './db/index.js';
-import { config, isOriginAllowed } from './config.js';
+import { config, matchesAllowedOrigin } from './config.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import conversationRoutes from './routes/conversations.js';
@@ -35,7 +35,7 @@ initSocket(server);
 
 const corsOptions = {
   origin(origin, cb) {
-    if (isOriginAllowed(origin)) return cb(null, true);
+    if (matchesAllowedOrigin(origin)) return cb(null, true);
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -62,7 +62,6 @@ app.get('/api/health', (_req, res) => {
       transport: 'Socket.IO',
       upload: `${config.maxUploadMb}MB`,
       stunServers: config.defaultStunServers,
-      corsOrigins: config.corsOrigins,
     },
   });
 });
@@ -75,8 +74,14 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/media', mediaRoutes);
 
 app.use((err, _req, res, _next) => {
-  if (err?.message === 'Unsupported file type') return res.status(400).json({ error: err.message });
-  if (err?.message === 'Not allowed by CORS') return res.status(403).json({ error: err.message, allowedOrigins: config.corsOrigins });
+  if (err?.message === 'Unsupported file type') {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (err?.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: err.message, origin: _req.headers.origin || null, allowed: config.corsOrigins });
+  }
+
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
@@ -89,6 +94,6 @@ if (fs.existsSync(clientDist)) {
   });
 }
 
-server.listen(config.port, () => {
+server.listen(config.port, config.bindHost || undefined, () => {
   console.log(`Tawasol server running on http://localhost:${config.port}`);
 });

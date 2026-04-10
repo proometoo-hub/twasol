@@ -28,11 +28,11 @@ const applyRange = (req, res, buffer, mimeType, downloadName = null) => {
   return res.end(buffer);
 };
 
-router.get('/legacy/:filename', (req, res) => {
+router.get('/legacy/:filename', async (req, res) => {
   const payload = verifyMediaToken(req.query.token);
   const filename = decodeURIComponent(req.params.filename);
   if (!payload || payload.legacy !== filename) return res.status(403).json({ error: 'Invalid media token' });
-  if (!canUserAccessMedia({ userId: payload.userId, legacy: filename })) return res.status(403).json({ error: 'Forbidden' });
+  if (!await canUserAccessMedia({ userId: payload.userId, legacy: filename })) return res.status(403).json({ error: 'Forbidden' });
   const filePath = path.join(uploadsRoot, filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Media not found' });
   const buffer = fs.readFileSync(filePath);
@@ -43,11 +43,11 @@ router.get('/legacy/:filename', (req, res) => {
   return applyRange(req, res, buffer, type, filename);
 });
 
-router.get('/:mediaId', (req, res) => {
+router.get('/:mediaId', async (req, res) => {
   const payload = verifyMediaToken(req.query.token);
   if (!payload || payload.mediaId !== req.params.mediaId) return res.status(403).json({ error: 'Invalid media token' });
-  if (!canUserAccessMedia({ userId: payload.userId, mediaId: req.params.mediaId })) return res.status(403).json({ error: 'Forbidden' });
-  const decrypted = decryptMediaBuffer(req.params.mediaId);
+  if (!await canUserAccessMedia({ userId: payload.userId, mediaId: req.params.mediaId })) return res.status(403).json({ error: 'Forbidden' });
+  const decrypted = await decryptMediaBuffer(req.params.mediaId);
   if (!decrypted) return res.status(404).json({ error: 'Media not found' });
   return applyRange(req, res, decrypted.buffer, decrypted.record.mime_type, decrypted.record.original_name);
 });

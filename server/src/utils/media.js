@@ -35,7 +35,7 @@ export const verifyMediaToken = (token) => {
   }
 };
 
-export const encryptAndStoreMedia = ({ file, ownerUserId, kind = 'generic' }) => {
+export const encryptAndStoreMedia = async ({ file, ownerUserId, kind = 'generic' }) => {
   const mediaId = createId('media');
   const storageName = `${mediaId}.bin`;
   const storagePath = path.join(mediaRoot, storageName);
@@ -44,7 +44,7 @@ export const encryptAndStoreMedia = ({ file, ownerUserId, kind = 'generic' }) =>
   const encrypted = Buffer.concat([cipher.update(file.buffer), cipher.final()]);
   const tag = cipher.getAuthTag();
   fs.writeFileSync(storagePath, encrypted);
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO media_files (id, owner_user_id, kind, storage_name, original_name, mime_type, size_bytes, iv_b64, tag_b64, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(mediaId, ownerUserId, kind, storageName, file.originalname || null, file.mimetype || 'application/octet-stream', file.size || encrypted.length, iv.toString('base64'), tag.toString('base64'), nowIso());
@@ -56,10 +56,10 @@ export const encryptAndStoreMedia = ({ file, ownerUserId, kind = 'generic' }) =>
   };
 };
 
-export const getMediaRecord = (mediaId) => db.prepare('SELECT * FROM media_files WHERE id = ?').get(mediaId);
+export const getMediaRecord = async (mediaId) => db.prepare('SELECT * FROM media_files WHERE id = ?').get(mediaId);
 
-export const decryptMediaBuffer = (mediaId) => {
-  const record = getMediaRecord(mediaId);
+export const decryptMediaBuffer = async (mediaId) => {
+  const record = await getMediaRecord(mediaId);
   if (!record) return null;
   const encrypted = fs.readFileSync(path.join(mediaRoot, record.storage_name));
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(record.iv_b64, 'base64'));
@@ -68,23 +68,23 @@ export const decryptMediaBuffer = (mediaId) => {
   return { record, buffer: decrypted };
 };
 
-const hasConversationAccess = (userId, conversationId) => Boolean(db.prepare(
+const hasConversationAccess = async (userId, conversationId) => Boolean(await db.prepare(
   'SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?'
 ).get(conversationId, userId));
 
-export const canUserAccessMedia = ({ userId, mediaId, legacy = null }) => {
+export const canUserAccessMedia = async ({ userId, mediaId, legacy = null }) => {
   if (legacy) {
-    const message = db.prepare('SELECT conversation_id FROM messages WHERE media_url = ? LIMIT 1').get(`/uploads/${legacy}`);
+    const message = await db.prepare('SELECT conversation_id FROM messages WHERE media_url = ? LIMIT 1').get(`/uploads/${legacy}`);
     if (message) return hasConversationAccess(userId, message.conversation_id);
-    const status = db.prepare('SELECT user_id FROM statuses WHERE media_url = ? LIMIT 1').get(`/uploads/${legacy}`);
-    if (status) return status.user_id === userId || Boolean(db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId));
+    const status = await db.prepare('SELECT user_id FROM statuses WHERE media_url = ? LIMIT 1').get(`/uploads/${legacy}`);
+    if (status) return status.user_id === userId || Boolean(await db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId));
     return false;
   }
-  const message = db.prepare('SELECT conversation_id FROM messages WHERE media_id = ? LIMIT 1').get(mediaId);
+  const message = await db.prepare('SELECT conversation_id FROM messages WHERE media_id = ? LIMIT 1').get(mediaId);
   if (message) return hasConversationAccess(userId, message.conversation_id);
-  const status = db.prepare('SELECT user_id FROM statuses WHERE media_id = ? LIMIT 1').get(mediaId);
-  if (status) return status.user_id === userId || Boolean(db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId));
-  const ownedUpload = db.prepare('SELECT owner_user_id FROM media_files WHERE id = ?').get(mediaId);
+  const status = await db.prepare('SELECT user_id FROM statuses WHERE media_id = ? LIMIT 1').get(mediaId);
+  if (status) return status.user_id === userId || Boolean(await db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId));
+  const ownedUpload = await db.prepare('SELECT owner_user_id FROM media_files WHERE id = ?').get(mediaId);
   return ownedUpload?.owner_user_id === userId;
 };
 

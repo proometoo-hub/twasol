@@ -7,33 +7,32 @@ const rootDir = path.resolve(__dirname, '..');
 
 const toList = (value = '') => value.split(',').map((item) => item.trim()).filter(Boolean);
 
-const wildcardToRegExp = (pattern) => {
-  const escaped = pattern
-    .replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
-    .replace(/\*/g, '.*');
-
-  return new RegExp(`^${escaped}$`, 'i');
-};
-
-const corsOriginEntries = [
+const rawOrigins = [
   ...toList(process.env.CORS_ORIGINS || ''),
   ...toList(process.env.ALLOWED_ORIGINS || ''),
   ...toList(process.env.BASE_URL || ''),
-];
+].filter(Boolean);
 
-const uniqueCorsOrigins = [...new Set(corsOriginEntries)];
-const wildcardCorsRegexes = uniqueCorsOrigins
-  .filter((entry) => entry.includes('*'))
-  .map(wildcardToRegExp);
-const exactCorsOrigins = new Set(uniqueCorsOrigins.filter((entry) => !entry.includes('*')));
+const uniqueOrigins = Array.from(new Set(rawOrigins));
 
-export const isOriginAllowed = (origin) => {
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wildcardToRegex = (pattern) => new RegExp(`^${escapeRegex(pattern).replace(/\\\*/g, '.*')}$`);
+const originMatchers = uniqueOrigins.map((pattern) => ({
+  pattern,
+  regex: pattern.includes('*') ? wildcardToRegex(pattern) : null,
+}));
+
+export const matchesAllowedOrigin = (origin) => {
   if (!origin) return true;
-  if (!uniqueCorsOrigins.length) return true;
-  if (exactCorsOrigins.has(origin)) return true;
-  if (wildcardCorsRegexes.some((regex) => regex.test(origin))) return true;
-  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return true;
-  return false;
+  if (!originMatchers.length) return true;
+
+  if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) return true;
+
+  return originMatchers.some(({ pattern, regex }) => {
+    if (!pattern) return false;
+    if (regex) return regex.test(origin);
+    return pattern === origin;
+  });
 };
 
 export const config = {
@@ -41,12 +40,13 @@ export const config = {
   isProd: process.env.NODE_ENV === 'production',
   rootDir,
   port: Number(process.env.PORT || 4000),
+  bindHost: process.env.BIND_HOST || '',
   jwtSecret: process.env.JWT_SECRET || 'tawasol-dev-secret-change-me',
-  corsOrigins: uniqueCorsOrigins,
-  trustProxy: String(process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '0')) === '1',
+  corsOrigins: uniqueOrigins,
+  trustProxy: String(process.env.TRUST_PROXY || process.env.TRUST_PROXY_HOPS || (process.env.NODE_ENV === 'production' ? '1' : '0')) === '1',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 80),
   appName: 'Tawasol',
-  baseUrl: process.env.BASE_URL || '',
+  baseUrl: process.env.BASE_URL || process.env.PUBLIC_APP_URL || '',
   defaultStunServers: [
     'stun:stun.l.google.com:19302',
     'stun:stun1.l.google.com:19302',

@@ -9,7 +9,6 @@ import { createSignedMediaUrl, encryptAndStoreMedia } from '../utils/media.js';
 const router = express.Router();
 router.use(requireAuth);
 
-
 const allowedFonts = new Set(['Cairo, sans-serif', 'Tahoma, sans-serif', 'Arial, sans-serif', 'Georgia, serif', 'Trebuchet MS, sans-serif']);
 const allowedAlign = new Set(['left', 'center', 'right']);
 const gradientPattern = /^(linear-gradient|radial-gradient)\(/i;
@@ -53,10 +52,10 @@ const parseJson = (value, fallback = {}) => {
 };
 
 const statusRowQuery = `
-  SELECT s.*, u.display_name AS displayName, u.avatar_url AS avatarUrl,
-    (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) AS views_count,
-    (SELECT 1 FROM status_views sv WHERE sv.status_id = s.id AND sv.viewer_id = ?) AS viewer_seen,
-    (SELECT 1 FROM status_mutes sm WHERE sm.user_id = ? AND sm.muted_user_id = s.user_id) AS is_muted
+  SELECT s.*, u.display_name AS "displayName", u.avatar_url AS "avatarUrl",
+    (SELECT COUNT(*)::int FROM status_views sv WHERE sv.status_id = s.id) AS views_count,
+    EXISTS(SELECT 1 FROM status_views sv WHERE sv.status_id = s.id AND sv.viewer_id = ?) AS viewer_seen,
+    EXISTS(SELECT 1 FROM status_mutes sm WHERE sm.user_id = ? AND sm.muted_user_id = s.user_id) AS is_muted
   FROM statuses s
   JOIN users u ON u.id = s.user_id
 `;
@@ -83,24 +82,24 @@ const sanitizeStatus = (row, viewerId) => ({
 
 const getStatusRowForViewer = (statusId, viewerId) => db.prepare(`${statusRowQuery} WHERE s.id = ?`).get(viewerId, viewerId, statusId);
 
-router.get('/', (req, res) => {
-  const statuses = db.prepare(`${statusRowQuery}
+router.get('/', async (req, res) => {
+  const statuses = await db.prepare(`${statusRowQuery}
     WHERE s.expires_at > ?
       AND NOT EXISTS (SELECT 1 FROM status_mutes sm WHERE sm.user_id = ? AND sm.muted_user_id = s.user_id)
     ORDER BY s.created_at DESC
-  `).all(req.user.id, req.user.id, nowIso(), req.user.id).map((row) => sanitizeStatus(row, req.user.id));
-  res.json({ statuses });
+  `).all(req.user.id, req.user.id, nowIso(), req.user.id);
+  res.json({ statuses: statuses.map((row) => sanitizeStatus(row, req.user.id)) });
 });
 
-router.post('/', upload.single('file'), (req, res) => {
+router.post('/', upload.single('file'), async (req, res) => {
   const type = req.body.type || (req.file ? 'media' : 'text');
   const text = String(req.body.text || '').trim();
   if (!text && !req.file) return res.status(400).json({ error: 'Status content is required' });
 
   const style = type === 'text' ? parseStatusStyle(req.body.style) : {};
-  const media = req.file ? encryptAndStoreMedia({ file: req.file, ownerUserId: req.user.id, kind: 'status' }) : null;
+  const media = req.file ? await encryptAndStoreMedia({ file: req.file, ownerUserId: req.user.id, kind: 'status' }) : null;
   const id = createId('status');
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO statuses (id, user_id, type, text, media_url, media_id, media_mime, style_json, expires_at, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
@@ -115,33 +114,33 @@ router.post('/', upload.single('file'), (req, res) => {
     new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     nowIso(),
   );
-  const row = getStatusRowForViewer(id, req.user.id);
+  const row = await getStatusRowForViewer(id, req.user.id);
   const status = sanitizeStatus(row, req.user.id);
   emitStatusUpdate({ type: 'created', status, actorUserId: req.user.id });
   res.status(201).json({ status });
 });
 
-router.post('/:statusId/view', (req, res) => {
-  const ownerRow = db.prepare('SELECT user_id FROM statuses WHERE id = ?').get(req.params.statusId);
-  db.prepare(`INSERT OR REPLACE INTO status_views (status_id, viewer_id, viewed_at) VALUES (?, ?, ?)`).run(req.params.statusId, req.user.id, nowIso());
+router.post('/:statusId/view', async (req, res) => {
+  const ownerRow = await db.prepare('SELECT user_id FROM statuses WHERE id = ?').get(req.params.statusId);
+  await db.prepare(`INSERT OR REPLACE INTO status_views (status_id, viewer_id, viewed_at) VALUES (?, ?, ?)`).run(req.params.statusId, req.user.id, nowIso());
   emitStatusUpdate({ type: 'viewed', statusId: req.params.statusId, actorUserId: req.user.id, ownerUserId: ownerRow?.user_id || null });
   res.json({ success: true });
 });
 
-router.post('/mute/:userId', (req, res) => {
-  db.prepare(`INSERT OR IGNORE INTO status_mutes (user_id, muted_user_id, created_at) VALUES (?, ?, ?)`).run(req.user.id, req.params.userId, nowIso());
+router.post('/mute/:userId', async (req, res) => {
+  await db.prepare(`INSERT OR IGNORE INTO status_mutes (user_id, muted_user_id, created_at) VALUES (?, ?, ?)`).run(req.user.id, req.params.userId, nowIso());
   emitStatusUpdate({ type: 'muted', actorUserId: req.user.id, targetUserId: req.params.userId });
   res.json({ success: true });
 });
 
-router.delete('/mute/:userId', (req, res) => {
-  db.prepare('DELETE FROM status_mutes WHERE user_id = ? AND muted_user_id = ?').run(req.user.id, req.params.userId);
+router.delete('/mute/:userId', async (req, res) => {
+  await db.prepare('DELETE FROM status_mutes WHERE user_id = ? AND muted_user_id = ?').run(req.user.id, req.params.userId);
   emitStatusUpdate({ type: 'unmuted', actorUserId: req.user.id, targetUserId: req.params.userId });
   res.json({ success: true });
 });
 
-router.delete('/:statusId', (req, res) => {
-  db.prepare('DELETE FROM statuses WHERE id = ? AND user_id = ?').run(req.params.statusId, req.user.id);
+router.delete('/:statusId', async (req, res) => {
+  await db.prepare('DELETE FROM statuses WHERE id = ? AND user_id = ?').run(req.params.statusId, req.user.id);
   emitStatusUpdate({ type: 'deleted', statusId: req.params.statusId, actorUserId: req.user.id });
   res.json({ success: true });
 });

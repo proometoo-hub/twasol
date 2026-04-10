@@ -1,29 +1,128 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import Database from 'better-sqlite3';
+import pkg from 'pg';
 import bcrypt from 'bcryptjs';
-import { fileURLToPath } from 'node:url';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createId, nowIso } from '../utils/helpers.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const root = path.resolve(__dirname, '../../');
-const dataDir = path.join(root, 'data');
-const dbFile = path.join(dataDir, 'tawasol.db');
-const legacyJsonFile = path.join(dataDir, 'tawasol.json');
-fs.mkdirSync(dataDir, { recursive: true });
+const { Pool, types } = pkg;
 
-const tableExists = (db, table) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
-const getColumns = (db, table) => db.prepare(`PRAGMA table_info(${table})`).all().map((item) => item.name);
-const hasColumn = (db, table, column) => getColumns(db, table).includes(column);
-const addColumnIfMissing = (db, table, columnSql, columnName) => {
-  if (!tableExists(db, table)) return;
-  if (!hasColumn(db, table, columnName)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnSql}`);
+types.setTypeParser(20, (value) => Number(value));
+types.setTypeParser(21, (value) => Number(value));
+types.setTypeParser(23, (value) => Number(value));
+types.setTypeParser(700, (value) => Number(value));
+types.setTypeParser(701, (value) => Number(value));
+types.setTypeParser(1700, (value) => Number(value));
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required. This version runs on PostgreSQL.');
+}
+
+const useSsl = ['1', 'true', 'yes'].includes(String(process.env.DATABASE_SSL || '').toLowerCase());
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
+  max: Number(process.env.DB_POOL_MAX || 10),
+});
+
+const txStorage = new AsyncLocalStorage();
+const currentExecutor = () => txStorage.getStore()?.client || pool;
+
+const conflictKeyMap = {
+  message_reads: ['message_id', 'user_id'],
+  status_views: ['status_id', 'viewer_id'],
 };
-const countRows = (db, table) => db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count;
 
-const createSchema = (db) => {
-  db.exec(`
+const withPlaceholders = (sql) => {
+  let index = 0;
+  return sql.replace(/\?/g, () => `$${++index}`);
+};
+
+const normalizeInsertConflict = (sql) => {
+  const replaceMatch = sql.match(/^\s*INSERT\s+OR\s+REPLACE\s+INTO\s+([a-z_][a-z0-9_]*)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
+  if (replaceMatch) {
+    const [, table, rawColumns, rawValues] = replaceMatch;
+    const columns = rawColumns.split(',').map((item) => item.trim()).filter(Boolean);
+    const conflictKeys = conflictKeyMap[table];
+    if (!conflictKeys) throw new Error(`Unsupported INSERT OR REPLACE target on PostgreSQL: ${table}`);
+    const updateCols = columns.filter((col) => !conflictKeys.includes(col));
+    const updateSql = updateCols.length
+      ? updateCols.map((col) => `${col} = EXCLUDED.${col}`).join(', ')
+      : `${conflictKeys[0]} = EXCLUDED.${conflictKeys[0]}`;
+    return `INSERT INTO ${table} (${rawColumns}) VALUES (${rawValues}) ON CONFLICT (${conflictKeys.join(', ')}) DO UPDATE SET ${updateSql}`;
+  }
+
+  const ignoreMatch = sql.match(/^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+/i);
+  if (ignoreMatch) {
+    return sql.replace(/INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT INTO') + ' ON CONFLICT DO NOTHING';
+  }
+
+  return sql;
+};
+
+const normalizeSql = (sql) => withPlaceholders(normalizeInsertConflict(String(sql).trim()));
+
+const runQuery = async (sql, params = []) => {
+  const executor = currentExecutor();
+  return executor.query(normalizeSql(sql), params);
+};
+
+class Statement {
+  constructor(sql) {
+    this.sql = sql;
+  }
+
+  async get(...params) {
+    const result = await runQuery(this.sql, params);
+    return result.rows[0] ?? undefined;
+  }
+
+  async all(...params) {
+    const result = await runQuery(this.sql, params);
+    return result.rows;
+  }
+
+  async run(...params) {
+    const result = await runQuery(this.sql, params);
+    return {
+      changes: result.rowCount,
+      rowCount: result.rowCount,
+      rows: result.rows,
+      row: result.rows[0] ?? null,
+    };
+  }
+}
+
+const db = {
+  prepare(sql) {
+    return new Statement(sql);
+  },
+  async exec(sql) {
+    const executor = currentExecutor();
+    return executor.query(String(sql));
+  },
+  transaction(fn) {
+    return async (...args) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await txStorage.run({ client }, async () => fn(...args));
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {}
+        throw error;
+      } finally {
+        client.release();
+      }
+    };
+  },
+  pool,
+};
+
+const createSchema = async () => {
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       phone TEXT UNIQUE,
@@ -45,260 +144,131 @@ const createSchema = (db) => {
 
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
-      type TEXT NOT NULL CHECK (type IN ('direct', 'group', 'channel')),
+      type TEXT NOT NULL,
       title TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       avatar_url TEXT,
-      created_by TEXT,
+      created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
       invite_code TEXT UNIQUE,
       settings_json TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS conversation_members (
       id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'member',
       joined_at TEXT NOT NULL,
       archived INTEGER NOT NULL DEFAULT 0,
       pinned INTEGER NOT NULL DEFAULT 0,
       muted_until TEXT,
       last_read_at TEXT,
-      UNIQUE (conversation_id, user_id),
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL,
-      sender_id TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'text',
-      text TEXT NOT NULL DEFAULT '',
-      media_url TEXT,
-      media_name TEXT,
-      media_size INTEGER,
-      reply_to_id TEXT,
-      forwarded_from_id TEXT,
-      edited_at TEXT,
-      deleted_at TEXT,
-      meta_json TEXT NOT NULL DEFAULT '{}',
-      media_id TEXT,
-      media_mime TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (reply_to_id) REFERENCES messages(id) ON DELETE SET NULL,
-      FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE SET NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS reactions (
-      id TEXT PRIMARY KEY,
-      message_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      emoji TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      UNIQUE (message_id, user_id, emoji),
-      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS message_reads (
-      message_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      read_at TEXT NOT NULL,
-      PRIMARY KEY (message_id, user_id),
-      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS starred_messages (
-      user_id TEXT NOT NULL,
-      message_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, message_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+      UNIQUE (conversation_id, user_id)
     );
 
     CREATE TABLE IF NOT EXISTS media_files (
       id TEXT PRIMARY KEY,
-      owner_user_id TEXT NOT NULL,
+      owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       kind TEXT NOT NULL DEFAULT 'generic',
       storage_name TEXT NOT NULL UNIQUE,
       original_name TEXT,
       mime_type TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
+      size_bytes BIGINT NOT NULL,
       iv_b64 TEXT NOT NULL,
       tag_b64 TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'text',
+      text TEXT NOT NULL DEFAULT '',
+      media_url TEXT,
+      media_name TEXT,
+      media_size BIGINT,
+      reply_to_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+      forwarded_from_id TEXT,
+      edited_at TEXT,
+      deleted_at TEXT,
+      meta_json TEXT NOT NULL DEFAULT '{}',
+      media_id TEXT REFERENCES media_files(id) ON DELETE SET NULL,
+      media_mime TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reactions (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+      UNIQUE (message_id, user_id, emoji)
+    );
+
+    CREATE TABLE IF NOT EXISTS message_reads (
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      read_at TEXT NOT NULL,
+      PRIMARY KEY (message_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS starred_messages (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, message_id)
     );
 
     CREATE TABLE IF NOT EXISTS statuses (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       type TEXT NOT NULL DEFAULT 'text',
       text TEXT NOT NULL DEFAULT '',
       media_url TEXT,
-      media_id TEXT,
+      media_id TEXT REFERENCES media_files(id) ON DELETE SET NULL,
       media_mime TEXT,
       style_json TEXT NOT NULL DEFAULT '{}',
       expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE SET NULL
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS status_views (
-      status_id TEXT NOT NULL,
-      viewer_id TEXT NOT NULL,
+      status_id TEXT NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
+      viewer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       viewed_at TEXT NOT NULL,
-      PRIMARY KEY (status_id, viewer_id),
-      FOREIGN KEY (status_id) REFERENCES statuses(id) ON DELETE CASCADE,
-      FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+      PRIMARY KEY (status_id, viewer_id)
     );
 
     CREATE TABLE IF NOT EXISTS status_mutes (
-      user_id TEXT NOT NULL,
-      muted_user_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      muted_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, muted_user_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (muted_user_id) REFERENCES users(id) ON DELETE CASCADE
+      PRIMARY KEY (user_id, muted_user_id)
     );
 
     CREATE TABLE IF NOT EXISTS blocks (
-      blocker_id TEXT NOT NULL,
-      blocked_id TEXT NOT NULL,
+      blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
-      PRIMARY KEY (blocker_id, blocked_id),
-      FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+      PRIMARY KEY (blocker_id, blocked_id)
     );
 
     CREATE TABLE IF NOT EXISTS calls (
       id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL,
-      creator_id TEXT NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'video' CHECK (kind IN ('audio', 'video')),
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      creator_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'video',
       status TEXT NOT NULL DEFAULT 'ringing',
       answered_at TEXT,
       ended_by TEXT,
       ended_at TEXT,
       updated_at TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-      FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+      created_at TEXT NOT NULL
     );
-  `);
-};
 
-const migrateSchema = (db) => {
-  addColumnIfMissing(db, 'users', 'phone TEXT', 'phone');
-  addColumnIfMissing(db, 'users', 'email TEXT', 'email');
-  addColumnIfMissing(db, 'users', 'display_name TEXT', 'display_name');
-  addColumnIfMissing(db, 'users', 'password_hash TEXT', 'password_hash');
-  addColumnIfMissing(db, 'users', "bio TEXT NOT NULL DEFAULT ''", 'bio');
-  addColumnIfMissing(db, 'users', 'avatar_url TEXT', 'avatar_url');
-  addColumnIfMissing(db, 'users', "locale TEXT NOT NULL DEFAULT 'ar'", 'locale');
-  addColumnIfMissing(db, 'users', "theme TEXT NOT NULL DEFAULT 'dark'", 'theme');
-  addColumnIfMissing(db, 'users', 'last_seen TEXT', 'last_seen');
-  addColumnIfMissing(db, 'users', 'is_admin INTEGER NOT NULL DEFAULT 0', 'is_admin');
-  addColumnIfMissing(db, 'users', "privacy_last_seen TEXT NOT NULL DEFAULT 'contacts'", 'privacy_last_seen');
-  addColumnIfMissing(db, 'users', "privacy_status_views TEXT NOT NULL DEFAULT 'contacts'", 'privacy_status_views');
-  addColumnIfMissing(db, 'users', 'privacy_read_receipts INTEGER NOT NULL DEFAULT 1', 'privacy_read_receipts');
-  addColumnIfMissing(db, 'users', 'created_at TEXT', 'created_at');
-
-  addColumnIfMissing(db, 'conversations', "description TEXT NOT NULL DEFAULT ''", 'description');
-  addColumnIfMissing(db, 'conversations', 'avatar_url TEXT', 'avatar_url');
-  addColumnIfMissing(db, 'conversations', 'created_by TEXT', 'created_by');
-  addColumnIfMissing(db, 'conversations', 'invite_code TEXT', 'invite_code');
-  addColumnIfMissing(db, 'conversations', "settings_json TEXT NOT NULL DEFAULT '{}'", 'settings_json');
-  addColumnIfMissing(db, 'conversations', 'created_at TEXT', 'created_at');
-
-  addColumnIfMissing(db, 'conversation_members', 'archived INTEGER NOT NULL DEFAULT 0', 'archived');
-  addColumnIfMissing(db, 'conversation_members', 'pinned INTEGER NOT NULL DEFAULT 0', 'pinned');
-  addColumnIfMissing(db, 'conversation_members', 'muted_until TEXT', 'muted_until');
-  addColumnIfMissing(db, 'conversation_members', 'last_read_at TEXT', 'last_read_at');
-
-  addColumnIfMissing(db, 'messages', "type TEXT NOT NULL DEFAULT 'text'", 'type');
-  addColumnIfMissing(db, 'messages', "text TEXT NOT NULL DEFAULT ''", 'text');
-  addColumnIfMissing(db, 'messages', 'media_url TEXT', 'media_url');
-  addColumnIfMissing(db, 'messages', 'media_name TEXT', 'media_name');
-  addColumnIfMissing(db, 'messages', 'media_size INTEGER', 'media_size');
-  addColumnIfMissing(db, 'messages', 'reply_to_id TEXT', 'reply_to_id');
-  addColumnIfMissing(db, 'messages', 'forwarded_from_id TEXT', 'forwarded_from_id');
-  addColumnIfMissing(db, 'messages', 'edited_at TEXT', 'edited_at');
-  addColumnIfMissing(db, 'messages', 'deleted_at TEXT', 'deleted_at');
-  addColumnIfMissing(db, 'messages', "meta_json TEXT NOT NULL DEFAULT '{}'", 'meta_json');
-  addColumnIfMissing(db, 'messages', 'media_id TEXT', 'media_id');
-  addColumnIfMissing(db, 'messages', 'media_mime TEXT', 'media_mime');
-  addColumnIfMissing(db, 'messages', 'created_at TEXT', 'created_at');
-
-  addColumnIfMissing(db, 'statuses', 'media_id TEXT', 'media_id');
-  addColumnIfMissing(db, 'statuses', 'media_mime TEXT', 'media_mime');
-  addColumnIfMissing(db, 'statuses', "style_json TEXT NOT NULL DEFAULT '{}'", 'style_json');
-
-  if (tableExists(db, 'statuses')) {
-    db.prepare("UPDATE statuses SET style_json = COALESCE(NULLIF(style_json, ''), '{}')").run();
-  }
-
-  addColumnIfMissing(db, 'calls', 'answered_at TEXT', 'answered_at');
-  addColumnIfMissing(db, 'calls', 'updated_at TEXT', 'updated_at');
-
-
-  if (tableExists(db, 'users')) {
-    const cols = getColumns(db, 'users');
-    const sets = [];
-    if (cols.includes('name')) sets.push(`display_name = COALESCE(NULLIF(display_name, ''), NULLIF(name, ''), username, 'مستخدم')`);
-    else sets.push(`display_name = COALESCE(NULLIF(display_name, ''), username, 'مستخدم')`);
-    if (cols.includes('password')) sets.push(`password_hash = COALESCE(NULLIF(password_hash, ''), password, '')`);
-    else sets.push(`password_hash = COALESCE(NULLIF(password_hash, ''), '')`);
-    if (cols.includes('avatar')) sets.push(`avatar_url = COALESCE(NULLIF(avatar_url, ''), avatar)`);
-    if (cols.includes('createdAt')) sets.push(`created_at = COALESCE(NULLIF(created_at, ''), createdAt, '${nowIso()}')`);
-    else sets.push(`created_at = COALESCE(NULLIF(created_at, ''), '${nowIso()}')`);
-    sets.push(`bio = COALESCE(bio, '')`);
-    sets.push(`locale = COALESCE(NULLIF(locale, ''), 'ar')`);
-    sets.push(`theme = COALESCE(NULLIF(theme, ''), 'dark')`);
-    sets.push(`last_seen = COALESCE(NULLIF(last_seen, ''), created_at, '${nowIso()}')`);
-    sets.push(`privacy_last_seen = COALESCE(NULLIF(privacy_last_seen, ''), 'contacts')`);
-    sets.push(`privacy_status_views = COALESCE(NULLIF(privacy_status_views, ''), 'contacts')`);
-    sets.push(`privacy_read_receipts = COALESCE(privacy_read_receipts, 1)`);
-    db.exec(`UPDATE users SET ${sets.join(', ')}`);
-  }
-
-  if (tableExists(db, 'conversations')) {
-    const cols = getColumns(db, 'conversations');
-    const sets = [];
-    if (cols.includes('name')) sets.push(`title = COALESCE(NULLIF(title, ''), NULLIF(name, ''), '')`);
-    if (cols.includes('avatar')) sets.push(`avatar_url = COALESCE(NULLIF(avatar_url, ''), avatar)`);
-    if (cols.includes('createdAt')) sets.push(`created_at = COALESCE(NULLIF(created_at, ''), createdAt, '${nowIso()}')`);
-    else sets.push(`created_at = COALESCE(NULLIF(created_at, ''), '${nowIso()}')`);
-    sets.push(`type = COALESCE(NULLIF(type, ''), 'direct')`);
-    sets.push(`description = COALESCE(description, '')`);
-    sets.push(`settings_json = COALESCE(NULLIF(settings_json, ''), '{}')`);
-    db.exec(`UPDATE conversations SET ${sets.join(', ')}`);
-  }
-
-  if (tableExists(db, 'messages')) {
-    const cols = getColumns(db, 'messages');
-    const sets = [];
-    if (cols.includes('content')) sets.push(`text = COALESCE(NULLIF(text, ''), content, '')`);
-    if (cols.includes('fileUrl')) sets.push(`media_url = COALESCE(NULLIF(media_url, ''), fileUrl)`);
-    if (cols.includes('replyToId')) sets.push(`reply_to_id = COALESCE(reply_to_id, replyToId)`);
-    if (cols.includes('createdAt')) sets.push(`created_at = COALESCE(NULLIF(created_at, ''), createdAt, '${nowIso()}')`);
-    else sets.push(`created_at = COALESCE(NULLIF(created_at, ''), '${nowIso()}')`);
-    sets.push(`type = COALESCE(NULLIF(type, ''), CASE WHEN media_url IS NOT NULL THEN 'file' ELSE 'text' END)`);
-    sets.push(`meta_json = COALESCE(NULLIF(meta_json, ''), '{}')`);
-    db.exec(`UPDATE messages SET ${sets.join(', ')}`);
-  }
-};
-
-const createIndexes = (db) => {
-  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_users_search_display_name ON users(display_name);
     CREATE INDEX IF NOT EXISTS idx_users_search_username ON users(username);
     CREATE INDEX IF NOT EXISTS idx_conversation_members_user_id ON conversation_members(user_id);
@@ -312,73 +282,35 @@ const createIndexes = (db) => {
   `);
 };
 
-const importLegacyJsonIfNeeded = (db) => {
-  if (!fs.existsSync(legacyJsonFile) || countRows(db, 'users') > 0) return;
-  let legacy;
-  try {
-    legacy = JSON.parse(fs.readFileSync(legacyJsonFile, 'utf8'));
-  } catch {
-    return;
-  }
-
-  const insertUser = db.prepare(`
-    INSERT OR IGNORE INTO users (
-      id, phone, email, username, display_name, password_hash, bio, avatar_url, locale, theme,
-      last_seen, is_admin, privacy_last_seen, privacy_status_views, privacy_read_receipts, created_at
-    ) VALUES (
-      @id, @phone, @email, @username, @display_name, @password_hash, @bio, @avatar_url, @locale, @theme,
-      @last_seen, @is_admin, @privacy_last_seen, @privacy_status_views, @privacy_read_receipts, @created_at
-    )
-  `);
-
-  for (const user of legacy.users || []) {
-    insertUser.run({
-      id: user.id || createId('usr'),
-      phone: user.phone || null,
-      email: user.email || null,
-      username: user.username || `user_${Math.random().toString(36).slice(2, 8)}`,
-      display_name: user.displayName || user.name || user.username || 'User',
-      password_hash: user.passwordHash || user.password || '',
-      bio: user.bio || '',
-      avatar_url: user.avatarUrl || user.avatar || null,
-      locale: user.locale || 'ar',
-      theme: user.theme || 'dark',
-      last_seen: user.lastSeen || nowIso(),
-      is_admin: user.isAdmin ? 1 : 0,
-      privacy_last_seen: user.privacyLastSeen || 'contacts',
-      privacy_status_views: user.privacyStatusViews || 'contacts',
-      privacy_read_receipts: user.privacyReadReceipts === false ? 0 : 1,
-      created_at: user.createdAt || nowIso(),
-    });
-  }
-};
-
-const seedDemoDataIfEmpty = async (db) => {
-  if (countRows(db, 'users') > 0) return;
+const seedAdminIfNeeded = async () => {
+  const countRow = await db.prepare('SELECT COUNT(*)::int AS count FROM users').get();
+  if (countRow?.count > 0) return;
   const adminId = process.env.ADMIN_ID || createId('usr');
   const adminHash = await bcrypt.hash(process.env.ADMIN_PASSWORD || '548519', 10);
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO users (
       id, phone, email, username, display_name, password_hash, bio, avatar_url, locale, theme,
       last_seen, is_admin, privacy_last_seen, privacy_status_views, privacy_read_receipts, created_at
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'contacts', 'contacts', 1, ?)
-  `).run(adminId, '+970000000001', 'admin@twasol.local', process.env.ADMIN_USERNAME || 'Admin', process.env.ADMIN_DISPLAY_NAME || 'Admin', adminHash, 'جاهز للتجربة والتطوير.', null, 'ar', 'dark', nowIso(), nowIso());
+  `).run(
+    adminId,
+    '+970000000001',
+    'admin@twasol.local',
+    process.env.ADMIN_USERNAME || 'Admin',
+    process.env.ADMIN_DISPLAY_NAME || 'Admin',
+    adminHash,
+    'جاهز للتجربة والتطوير.',
+    null,
+    'ar',
+    'dark',
+    nowIso(),
+    nowIso(),
+  );
 };
 
-const createDb = () => {
-  const db = new Database(dbFile);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('synchronous = NORMAL');
-  createSchema(db);
-  migrateSchema(db);
-  createIndexes(db);
-  importLegacyJsonIfNeeded(db);
-  return db;
-};
-
-const db = createDb();
-await seedDemoDataIfEmpty(db);
+await createSchema();
+await seedAdminIfNeeded();
 
 export default db;
+export { pool };

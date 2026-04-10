@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  password      String
+  avatar        String?
+  bio           String?  @default("")
+  status        String?  @default("online")
+  lastSeen      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  sentMessages  Message[] @relation("SentMessages")
+  memberOf      ConversationMember[]
+  stories       Story[]
+}
+
+model Conversation {
+  id        Int                 @id @default(autoincrement())
+  name      String?
+  image     String?
+  isGroup   Boolean             @default(false)
+  isChannel Boolean             @default(false)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  messages  Message[]
+  members   ConversationMember[]
+}
+
+model ConversationMember {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  conversationId Int
+  role           String       @default("member")
+  joinedAt       DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  text           String?
+  type           String       @default("text")
+  fileUrl        String?
+  fileName       String?
+  fileSize       Int?
+  senderId       Int
+  conversationId Int
+  replyToId      Int?
+  isRead         Boolean      @default(false)
+  isDeleted      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  replyTo        Message?     @relation("Replies", fields: [replyToId], references: [id])
+  replies        Message[]    @relation("Replies")
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+model Story {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  mediaUrl  String?
+  text      String?
+  color     String?  @default("#005c4b")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+}

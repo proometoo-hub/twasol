@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://twasol-production.up.railway.app/api/$1"
+    },
+    {
+      "source": "/api/media/(.*)",
+      "destination": "https://twasol-production.up.railway.app/api/media/$1"
+    },
+    {
+      "source": "/socket.io/(.*)",
+      "destination": "https://twasol-production.up.railway.app/socket.io/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
